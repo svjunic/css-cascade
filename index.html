@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CSS Diff — 有効プロパティ比較</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <h1 class="app-title">CSS Diff</h1>
+    <p class="app-desc">CSSの構造を解釈し、最終的に有効なプロパティを新旧比較します。</p>
+
+    <div class="dropzones">
+      <!-- 旧 CSS -->
+      <div class="dropzone" id="old-drop" data-default-label="旧 CSS をドロップ" role="button" tabindex="0">
+        <div class="dropzone-icon">📄</div>
+        <div class="dropzone-label">旧 CSS をドロップ</div>
+        <div class="dropzone-sub">またはクリックして選択</div>
+      </div>
+
+      <div class="dropzones-arrow">→</div>
+
+      <!-- 新 CSS -->
+      <div class="dropzone" id="new-drop" data-default-label="新 CSS をドロップ" role="button" tabindex="0">
+        <div class="dropzone-icon">📄</div>
+        <div class="dropzone-label">新 CSS をドロップ</div>
+        <div class="dropzone-sub">またはクリックして選択</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="controls-bar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input
+        type="search"
+        id="search"
+        class="search-input"
+        placeholder="セレクタを絞り込む…（fzf）"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+
+    <div id="filter-buttons" class="filter-buttons">
+      <button class="filter-btn active" data-filter="changed">変更あり</button>
+      <button class="filter-btn" data-filter="all">すべて</button>
+      <button class="filter-btn" data-filter="added">追加</button>
+      <button class="filter-btn" data-filter="removed">削除</button>
+      <button class="filter-btn" data-filter="unchanged">変更なし</button>
+    </div>
+
+    <div class="option-checks">
+      <label class="option-check-label">
+        <input type="checkbox" id="opt-ignore-cosmetic" />
+        表記揺れを無視（空白・先頭ゼロ・色・クォート）
+      </label>
+      <label class="option-check-label">
+        <input type="checkbox" id="opt-semantic-selectors" />
+        同じ解釈のセレクタをまとめる
+      </label>
+    </div>
+  </div>
+
+  <div id="summary" class="summary-bar"></div>
+
+  <div id="context-tabs" class="context-tabs"></div>
+
+  <main id="results" class="results"></main>
+
+  <script type="module" src="/src/ui/main.js"></script>
+</body>
+</html>

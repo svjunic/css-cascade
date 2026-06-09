@@ -1,0 +1,206 @@
+/* ============================================================
+ * テスト用CSS（旧） — 架空のコーポレートサイトのスタイル
+ * 差分アプリの動作確認用サンプル。
+ * 新(new)との差分は全体の約2割で、変更・追加・削除・上書き・
+ * 表記揺れ・セレクタ集約のパターンを一通り含む。
+ * ============================================================ */
+
+/* ---- リセット / ベース ---- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  color: #333333;
+  background-color: #ffffff;
+}
+
+a {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ---- レイアウト ---- */
+.container {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.section {
+  padding: 64px 0;
+}
+
+/* ---- ヘッダー / ナビ ---- */
+.site-header {
+  position: sticky;
+  top: 0;
+  height: 64px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e0e0e0;
+  z-index: 100;
+}
+
+.site-header .logo {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111111;
+}
+
+/* 後勝ち: color を2回定義 → 最終的に #555555 が有効 */
+.nav-link {
+  display: inline-block;
+  padding: 8px 12px;
+  color: #1a73e8;
+  color: #555555;
+}
+
+.nav>.item {
+  margin-left: 16px;
+}
+
+/* ---- ヒーロー ---- */
+.hero {
+  padding: 96px 0;
+  text-align: center;
+  background: linear-gradient(135deg, #1a73e8, #6c5ce7);
+  color: #ffffff;
+}
+
+.hero__title {
+  font-size: 48px;
+  font-weight: 800;
+  margin-bottom: 16px;
+}
+
+.hero__lead {
+  font-size: 18px;
+  opacity: .8;
+}
+
+/* ---- ボタン ---- */
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn--primary {
+  background-color: #1a73e8;
+  color: #ffffff;
+}
+
+.btn--ghost {
+  background-color: transparent;
+  border: 1px solid #1a73e8;
+  color: #1a73e8;
+}
+
+/* ---- カード ---- */
+.card {
+  padding: 24px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.card__title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #111111;
+}
+
+.card__body {
+  font-size: 14px;
+  color: #666666;
+}
+
+/* 旧サイトにのみ存在（new では削除される） */
+.card__ribbon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 4px 8px;
+  background-color: #ff0000;
+  color: white;
+  font-size: 12px;
+}
+
+/* ---- フォーム ---- */
+input[type="text"],
+input[type="email"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: #333333;
+}
+
+/* ---- フッター ---- */
+.site-footer {
+  padding: 48px 0;
+  background-color: #111111;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.site-footer a {
+  color: #ffffff;
+}
+
+/* ---- ユーティリティ ---- */
+.text-center {
+  text-align: center;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+/* ---- レスポンシブ ---- */
+@media (max-width: 768px) {
+  .hero__title {
+    font-size: 32px;
+  }
+
+  .container {
+    padding: 0 16px;
+  }
+}
+
+/* ---- アニメーション ---- */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

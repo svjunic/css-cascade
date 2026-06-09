@@ -1,0 +1,34 @@
+# 依存
+node_modules/
+
+# ビルド成果物（GitHub Pages 公開用のため docs/ はコミット対象）
+
+# ログ
+*.log
+npm-debug.log*
+
+# テストカバレッジ
+coverage/
+
+# 環境変数
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# エディタ
+*.swp
+.idea/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Claude Code
+CLAUDE.local.md
+.claude/worktrees
+.claude/skills
+.claude/agents
+.claude/rules
+.claude/docs
+.claude/commands
