@@ -61,6 +61,36 @@ body {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   padding: 20px 24px;
+  position: relative;
+}
+
+.github-link {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.github-link:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+  background: var(--color-border);
+}
+
+.github-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 .app-title {
