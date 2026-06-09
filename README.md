@@ -2,9 +2,9 @@
 
 CSS の変更内容を構造レベルで比較するツールです。単純な文字列差分ではなく、**同一セレクタ内で最終的に有効になるプロパティ**を算出したうえで新旧を比較します。
 
-**デモ:** [https://svjunic.github.io/sv-css-diff/](https://svjunic.github.io/sv-css-diff/)
+**Github Pages:** [https://svjunic.github.io/sv-css-diff/](https://svjunic.github.io/sv-css-diff/)
 
-ヽ(´ー｀)ノ
+ヽ(´ー｀)ノ＜ Github Pagesで公開しているので、ローカルで立ち上げる必要はないよ！
 
 ## 特徴
 
