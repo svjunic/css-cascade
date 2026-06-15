@@ -11,7 +11,10 @@
   },
   "files": [
     "bin/",
-    "src/core/"
+    "src/core/",
+    "README.md",
+    "README/cli.md",
+    "LICENSE"
   ],
   "scripts": {
     "dev": "vite",
