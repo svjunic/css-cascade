@@ -17,7 +17,7 @@ html {
 
 body {
   /* 表記揺れ: ダブル→シングルクォート（ignoreCosmetic で差分から除外） */
-  font-family: 'Helvetica Neue', Arial, sans-serif;
+  font-family: "Helvetica Neue", Arial, sans-serif;
   line-height: 1.6;
   /* 実変更: 本文色を少し濃く */
   color: #2d2d2d;
@@ -160,8 +160,8 @@ a:hover {
 
 /* ---- フォーム ---- */
 /* 表記揺れ: 属性セレクタのクォート除去（semanticSelectors で集約） */
-input[type='text'],
-input[type='email'] {
+input[type="text"],
+input[type="email"] {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #cccccc;
@@ -220,14 +220,52 @@ input[type='email'] {
 }
 
 /* ---- 評価順の違い ---- */
-.mogeta {
+.mogeta1-1 {
   margin-inline: auto;
   margin-block-start: 0;
   margin-block-end: 10px;
 }
-.mogeta2 {
+.mogeta1-2 {
   margin: 0 auto;
   margin-block-start: 0;
   margin-block-end: 10px;
   margin-block-start: 10px; /* 最終評価対象 */
 }
+
+/* ---- セレクタの出現順の警告 ---- */
+/* .mogeta2-1 と .mogeta2-1--moge-ta は同じ Element に当たるスタイルとする */
+.mogeta2-1 {
+  color: red;
+}
+.mogeta2-1--moge-ta {
+  color: blue;
+}
+.mogeta2-1-other {
+  color: red;
+}
+
+/* ---- 出現順テスト: パターン1（単純スワップ） ---- */
+/* old と比べて .order-p1-alpha と .order-p1-beta の順番が逆転 → 強い警告 */
+.order-p1-beta {
+  color: #1e88e5;
+  font-weight: 400;
+}
+.order-p1-alpha {
+  color: #e53935;
+  font-weight: 700;
+}
+.order-p1-gamma {
+  font-size: 14px;
+}
+
+/* ---- 出現順テスト: パターン2（削除後に順序維持） ---- */
+/* .order-p2-beta が削除されるが、残りの相対順序は変わらない → 警告なし */
+.order-p2-alpha { padding: 8px; }
+.order-p2-gamma { padding: 16px; }
+.order-p2-delta { padding: 24px; }
+
+/* ---- 出現順テスト: パターン3（挿入） ---- */
+/* .order-p3-beta が追加されるが、既存セレクタの相対順序は変わらない → 警告なし */
+.order-p3-alpha { margin: 0; }
+.order-p3-beta  { margin: 8px; }
+.order-p3-gamma { margin: 16px; }

@@ -7,9 +7,10 @@
 import { parseCss } from '../core/parse.js'
 import { resolve } from '../core/resolve.js'
 import { diff } from '../core/diff.js'
+import { computeOrderRisks } from '../core/order-risk.js'
 import { initDropzone, updateDropzoneState } from './dropzone.js'
 import { createSearchIndex, search } from './fuzzy.js'
-import { renderDiff, summarizeDiff } from './render.js'
+import { renderDiff, summarizeDiff, renderOrderRisks } from './render.js'
 
 // ─── 状態 ─────────────────────────────────────────────────────────────────
 const state = {
@@ -28,6 +29,10 @@ const state = {
   // 表記揺れ・セレクタ等価オプション
   ignoreCosmetic: false,
   semanticSelectors: false,
+  // 出現順リスク
+  orderRisks: [],
+  // 出現順リスクセクションで展開中のコンテキスト: Set<contextKey>
+  expandedOrderRiskContexts: new Set(),
   // クリックで展開中のセレクタ: Set<"contextKey||selector">
   expandedSelectors: new Set(),
 }
@@ -54,6 +59,10 @@ function runDiff() {
   const resolvedOld = resolve(parsedOld)
   const resolvedNew = resolve(parsedNew)
   state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
+  state.orderRisks = computeOrderRisks(state.oldCss, state.newCss, parseOpts)
+  state.expandedOrderRiskContexts = new Set(
+    state.orderRisks.filter(r => r.hasWarning).map(r => r.contextKey)
+  )
 
   // 検索インデックスを再構築
   state.allItems = []
@@ -88,7 +97,19 @@ function getFilteredItems() {
   }
 
   // ステータスフィルタ
-  if (state.filter !== 'all') {
+  if (state.filter === 'order-risk') {
+    // 出現順警告に関連するセレクタのみ表示
+    const warnedSelectors = new Set()
+    for (const ctxResult of state.orderRisks) {
+      for (const row of ctxResult.rows) {
+        if (row.type === 'moved') {
+          if (row.oldSelector) warnedSelectors.add(`${ctxResult.contextKey}::${row.oldSelector}`)
+          if (row.newSelector) warnedSelectors.add(`${ctxResult.contextKey}::${row.newSelector}`)
+        }
+      }
+    }
+    items = items.filter(item => warnedSelectors.has(`${item.contextKey}::${item.selector}`))
+  } else if (state.filter !== 'all') {
     items = items.filter(item => {
       if (state.filter === 'changed') {
         return item.status === 'changed' || item.status === 'added' || item.status === 'removed'
@@ -112,10 +133,40 @@ function renderResults() {
   }
 
   const filteredItems = getFilteredItems()
-  resultsEl.innerHTML = renderDiff(state.diffResult, filteredItems, {
+  const isOrderRiskFilter = state.filter === 'order-risk'
+
+  const orderRisksHtml = renderOrderRisks(state.orderRisks, {
+    activeContext: state.activeContext,
+    filterOrderRisk: isOrderRiskFilter,
+    expandedContexts: state.expandedOrderRiskContexts,
+  })
+
+  const diffHtml = renderDiff(state.diffResult, isOrderRiskFilter ? filteredItems : filteredItems, {
     activeContext: state.activeContext,
     showUnchanged: state.showUnchanged,
     expandedSelectors: state.expandedSelectors,
+  })
+
+  resultsEl.innerHTML = orderRisksHtml + diffHtml
+
+  // 出現順リスクのコンテキストヘッダーをクリックで開閉
+  resultsEl.querySelectorAll('.or-context-header[data-or-ctx-key]').forEach(header => {
+    const toggle = () => {
+      const key = header.dataset.orCtxKey
+      if (state.expandedOrderRiskContexts.has(key)) {
+        state.expandedOrderRiskContexts.delete(key)
+      } else {
+        state.expandedOrderRiskContexts.add(key)
+      }
+      renderResults()
+    }
+    header.addEventListener('click', toggle)
+    header.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        toggle()
+      }
+    })
   })
 
   // 「変更なしを表示」ボタンのイベントを設定

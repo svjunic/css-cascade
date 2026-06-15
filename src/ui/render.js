@@ -264,6 +264,154 @@ function highlightPositions(text, positions) {
     .join('')
 }
 
+// ─── 出現順リスクのレンダリング ───────────────────────────────────────────
+
+/**
+ * 1 つの競合プロパティ行を生成する。
+ */
+function renderConflictProp(conflict) {
+  const propEsc = esc(conflict.prop)
+  const oldVal = esc(conflict.oldEffective.value) + (conflict.oldEffective.important ? ' !important' : '')
+  const newVal = esc(conflict.newEffective.value) + (conflict.newEffective.important ? ' !important' : '')
+  return `<span class="or-conflict-prop"><span class="or-prop-name">${propEsc}</span>: <span class="or-prop-old">${oldVal}</span> <span class="or-prop-arrow">→</span> <span class="or-prop-new">${newVal}</span></span>`
+}
+
+/**
+ * 1 つの moved 行（⚠️ 行）を生成する。
+ */
+function renderMovedRow(row) {
+  const oldSel = esc(row.oldSelector)
+  const newSel = esc(row.newSelector)
+
+  const hasConflict = row.conflictingProps && row.conflictingProps.length > 0
+  const specNote = row.sameSpecificity
+    ? '<span class="or-spec-same">同一詳細度</span>'
+    : '<span class="or-spec-diff">詳細度が異なる</span>'
+
+  const conflictHtml = hasConflict
+    ? `<div class="or-conflicts">${row.conflictingProps.map(renderConflictProp).join('')}</div>`
+    : ''
+
+  const rowClass = hasConflict ? 'or-row or-row--moved or-row--conflict' : 'or-row or-row--moved'
+
+  return `<tr class="${rowClass}">
+    <td class="or-cell or-cell--old"><code>${oldSel}</code></td>
+    <td class="or-cell or-cell--new"><code>${newSel}</code></td>
+    <td class="or-cell or-cell--status">
+      <span class="or-badge or-badge--moved">⚠️ 順序変更</span>
+      ${specNote}
+      ${conflictHtml}
+    </td>
+  </tr>`
+}
+
+/**
+ * equal / deleted / added 行を生成する。
+ */
+function renderSimpleRow(row) {
+  if (row.type === 'equal') {
+    return `<tr class="or-row or-row--equal">
+      <td class="or-cell or-cell--old"><code>${esc(row.oldSelector)}</code></td>
+      <td class="or-cell or-cell--new"><code>${esc(row.newSelector)}</code></td>
+      <td class="or-cell or-cell--status"></td>
+    </tr>`
+  }
+  if (row.type === 'deleted') {
+    return `<tr class="or-row or-row--deleted">
+      <td class="or-cell or-cell--old"><code>${esc(row.oldSelector)}</code></td>
+      <td class="or-cell or-cell--new or-cell--empty"></td>
+      <td class="or-cell or-cell--status"><span class="or-badge or-badge--deleted">削除</span></td>
+    </tr>`
+  }
+  if (row.type === 'added') {
+    return `<tr class="or-row or-row--added">
+      <td class="or-cell or-cell--old or-cell--empty"></td>
+      <td class="or-cell or-cell--new"><code>${esc(row.newSelector)}</code></td>
+      <td class="or-cell or-cell--status"><span class="or-badge or-badge--added">追加</span></td>
+    </tr>`
+  }
+  return ''
+}
+
+/**
+ * 1 コンテキスト分の順序比較テーブルを生成する。
+ */
+function renderOrderRiskContext(ctxResult, expanded = false) {
+  const { contextKey, rows, hasWarning } = ctxResult
+  const label = contextKey === 'base' ? 'トップレベル (base)' : esc(contextKey)
+  const warningCount = rows.filter(r => r.type === 'moved').length
+  const badge = hasWarning
+    ? `<span class="or-ctx-badge or-ctx-badge--warning">${warningCount} 件の順序変更</span>`
+    : `<span class="or-ctx-badge or-ctx-badge--ok">順序変更なし</span>`
+
+  const toggleIcon = `<span class="or-toggle-icon">${expanded ? '▼' : '▶'}</span>`
+
+  const rowsHtml = rows.map(row => {
+    if (row.type === 'moved') return renderMovedRow(row)
+    return renderSimpleRow(row)
+  }).join('')
+
+  return `<div class="or-context">
+    <div class="or-context-header" data-or-ctx-key="${esc(contextKey)}" aria-expanded="${expanded}" role="button" tabindex="0">
+      ${toggleIcon}
+      <span class="or-context-label">${label}</span>
+      ${badge}
+    </div>
+    <div class="or-table-wrap${expanded ? '' : ' or-table-wrap--collapsed'}">
+      <table class="or-table">
+        <thead>
+          <tr>
+            <th class="or-th">旧 CSS</th>
+            <th class="or-th">新 CSS</th>
+            <th class="or-th">状態</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+  </div>`
+}
+
+/**
+ * 出現順リスク全体のセクションを HTML 文字列として返す。
+ *
+ * @param {Array} orderRisks - computeOrderRisks() の出力
+ * @param {{ activeContext?: string, filterOrderRisk?: boolean }} [options]
+ * @returns {string}
+ */
+export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrderRisk = false, expandedContexts = new Set() } = {}) {
+  if (!orderRisks || orderRisks.length === 0) return ''
+
+  const totalWarnings = orderRisks.reduce((n, r) => n + r.rows.filter(row => row.type === 'moved').length, 0)
+  if (totalWarnings === 0 && !filterOrderRisk) return ''
+
+  // filterOrderRisk モードでは moved 行が 1 件以上あるコンテキストのみ表示
+  const contexts = filterOrderRisk
+    ? orderRisks.filter(r => r.hasWarning)
+    : orderRisks
+
+  const filtered = activeContext === 'all'
+    ? contexts
+    : contexts.filter(r => r.contextKey === activeContext)
+
+  if (filtered.length === 0) return ''
+
+  const contextHtml = filtered.map(r => renderOrderRiskContext(r, expandedContexts.has(r.contextKey))).join('')
+
+  return `<section class="order-risks-section">
+    <div class="order-risks-header">
+      <span class="order-risks-title">セレクタ出現順の比較</span>
+      ${totalWarnings > 0
+        ? `<span class="order-risks-count order-risks-count--warning">⚠️ ${totalWarnings} 件の順序変更</span>`
+        : `<span class="order-risks-count order-risks-count--ok">順序変更なし</span>`
+      }
+    </div>
+    ${contextHtml}
+  </section>`
+}
+
+// ─── 差分のレンダリング ───────────────────────────────────────────────────
+
 /**
  * 差分結果全体を HTML 文字列として返す。
  *
