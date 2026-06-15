@@ -38,6 +38,80 @@ function normalizeKeyframesName(atRuleName, params) {
 }
 
 /**
+ * CSS テキストをパースして、各コンテキスト内のセレクタを最終出現順で返す。
+ * セレクタが複数回登場する場合は最後の出現位置を採用する（カスケード的に最後が有効なため）。
+ *
+ * @param {string} cssText
+ * @param {{ semanticSelectors?: boolean }} [options]
+ * @returns {Map<string, string[]>}  Map<contextKey, 出現順のセレクタ配列>
+ */
+export function parseSelectorOrder(cssText, options = {}) {
+  const posMap = new Map() // contextKey → Map<selector, lastPosition>
+  let counter = 0
+
+  function ensureCtx(key) {
+    if (!posMap.has(key)) posMap.set(key, new Map())
+    return posMap.get(key)
+  }
+
+  function addSel(contextKey, selector) {
+    ensureCtx(contextKey).set(selector, counter++)
+  }
+
+  const normSel = options.semanticSelectors ? canonicalizeSelector : normalizeSelector
+
+  function processRule(rule, contextKey) {
+    for (const sel of rule.selectors.map(s => normSel(s))) {
+      addSel(contextKey, sel)
+    }
+  }
+
+  function processAtRule(atRule, parentContextKey) {
+    const name = atRule.name.toLowerCase()
+    if (name === 'media') {
+      const condition = normalizeMediaCondition(atRule.params)
+      const contextKey = `@media ${condition}`
+      ensureCtx(contextKey)
+      atRule.each(node => {
+        if (node.type === 'rule') processRule(node, contextKey)
+        else if (node.type === 'atrule') processAtRule(node, contextKey)
+      })
+    } else if (name === 'font-face' || name === 'keyframes' || name === '-webkit-keyframes' || name === 'charset' || name === 'import' || name === 'namespace') {
+      // cascade ordering に関係しないコンテキストはスキップ
+    } else {
+      if (atRule.nodes) {
+        atRule.each(node => {
+          if (node.type === 'rule') processRule(node, parentContextKey)
+          else if (node.type === 'atrule') processAtRule(node, parentContextKey)
+        })
+      }
+    }
+  }
+
+  let root
+  try {
+    root = postcss.parse(cssText, { from: undefined })
+  } catch {
+    return new Map()
+  }
+
+  ensureCtx('base')
+  root.each(node => {
+    if (node.type === 'rule') processRule(node, 'base')
+    else if (node.type === 'atrule') processAtRule(node, 'base')
+  })
+
+  const result = new Map()
+  for (const [contextKey, selectorPos] of posMap) {
+    result.set(
+      contextKey,
+      [...selectorPos.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]),
+    )
+  }
+  return result
+}
+
+/**
  * CSS テキストをパースして中間モデルを返す。
  *
  * @param {string} cssText - CSS 文字列
