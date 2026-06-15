@@ -336,7 +336,7 @@ function renderSimpleRow(row) {
 /**
  * 1 コンテキスト分の順序比較テーブルを生成する。
  */
-function renderOrderRiskContext(ctxResult) {
+function renderOrderRiskContext(ctxResult, expanded = false) {
   const { contextKey, rows, hasWarning } = ctxResult
   const label = contextKey === 'base' ? 'トップレベル (base)' : esc(contextKey)
   const warningCount = rows.filter(r => r.type === 'moved').length
@@ -344,17 +344,20 @@ function renderOrderRiskContext(ctxResult) {
     ? `<span class="or-ctx-badge or-ctx-badge--warning">${warningCount} 件の順序変更</span>`
     : `<span class="or-ctx-badge or-ctx-badge--ok">順序変更なし</span>`
 
+  const toggleIcon = `<span class="or-toggle-icon">${expanded ? '▼' : '▶'}</span>`
+
   const rowsHtml = rows.map(row => {
     if (row.type === 'moved') return renderMovedRow(row)
     return renderSimpleRow(row)
   }).join('')
 
   return `<div class="or-context">
-    <div class="or-context-header">
+    <div class="or-context-header" data-or-ctx-key="${esc(contextKey)}" aria-expanded="${expanded}" role="button" tabindex="0">
+      ${toggleIcon}
       <span class="or-context-label">${label}</span>
       ${badge}
     </div>
-    <div class="or-table-wrap">
+    <div class="or-table-wrap${expanded ? '' : ' or-table-wrap--collapsed'}">
       <table class="or-table">
         <thead>
           <tr>
@@ -376,7 +379,7 @@ function renderOrderRiskContext(ctxResult) {
  * @param {{ activeContext?: string, filterOrderRisk?: boolean }} [options]
  * @returns {string}
  */
-export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrderRisk = false } = {}) {
+export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrderRisk = false, expandedContexts = new Set() } = {}) {
   if (!orderRisks || orderRisks.length === 0) return ''
 
   const totalWarnings = orderRisks.reduce((n, r) => n + r.rows.filter(row => row.type === 'moved').length, 0)
@@ -393,7 +396,7 @@ export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrde
 
   if (filtered.length === 0) return ''
 
-  const contextHtml = filtered.map(renderOrderRiskContext).join('')
+  const contextHtml = filtered.map(r => renderOrderRiskContext(r, expandedContexts.has(r.contextKey))).join('')
 
   return `<section class="order-risks-section">
     <div class="order-risks-header">

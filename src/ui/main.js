@@ -31,6 +31,8 @@ const state = {
   semanticSelectors: false,
   // 出現順リスク
   orderRisks: [],
+  // 出現順リスクセクションで展開中のコンテキスト: Set<contextKey>
+  expandedOrderRiskContexts: new Set(),
   // クリックで展開中のセレクタ: Set<"contextKey||selector">
   expandedSelectors: new Set(),
 }
@@ -58,6 +60,9 @@ function runDiff() {
   const resolvedNew = resolve(parsedNew)
   state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
   state.orderRisks = computeOrderRisks(state.oldCss, state.newCss, parseOpts)
+  state.expandedOrderRiskContexts = new Set(
+    state.orderRisks.filter(r => r.hasWarning).map(r => r.contextKey)
+  )
 
   // 検索インデックスを再構築
   state.allItems = []
@@ -133,6 +138,7 @@ function renderResults() {
   const orderRisksHtml = renderOrderRisks(state.orderRisks, {
     activeContext: state.activeContext,
     filterOrderRisk: isOrderRiskFilter,
+    expandedContexts: state.expandedOrderRiskContexts,
   })
 
   const diffHtml = renderDiff(state.diffResult, isOrderRiskFilter ? filteredItems : filteredItems, {
@@ -142,6 +148,26 @@ function renderResults() {
   })
 
   resultsEl.innerHTML = orderRisksHtml + diffHtml
+
+  // 出現順リスクのコンテキストヘッダーをクリックで開閉
+  resultsEl.querySelectorAll('.or-context-header[data-or-ctx-key]').forEach(header => {
+    const toggle = () => {
+      const key = header.dataset.orCtxKey
+      if (state.expandedOrderRiskContexts.has(key)) {
+        state.expandedOrderRiskContexts.delete(key)
+      } else {
+        state.expandedOrderRiskContexts.add(key)
+      }
+      renderResults()
+    }
+    header.addEventListener('click', toggle)
+    header.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        toggle()
+      }
+    })
+  })
 
   // 「変更なしを表示」ボタンのイベントを設定
   resultsEl.querySelectorAll('.unchanged-toggle').forEach(btn => {

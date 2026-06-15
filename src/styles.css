@@ -698,6 +698,22 @@ body {
   padding: 8px 16px;
   background: var(--color-bg);
   border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.or-context-header:hover {
+  background: var(--color-surface);
+}
+
+.or-toggle-icon {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.or-table-wrap--collapsed {
+  display: none;
 }
 
 .or-context-label {
