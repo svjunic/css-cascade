@@ -32,3 +32,4 @@ CLAUDE.local.md
 .claude/rules
 .claude/docs
 .claude/commands
+settings.local.json
