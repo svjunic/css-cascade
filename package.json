@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "postbuild": "node scripts/sync-skills.js",
     "test": "vitest run"
   },
   "dependencies": {

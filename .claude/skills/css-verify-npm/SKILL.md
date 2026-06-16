@@ -8,7 +8,7 @@ allowed-tools:
 
 # CSS 差分検証スキル（npm版）
 
-`@svjunic/css-diff` を `npx` 経由で実行し、CSSカスケードルールを踏まえた意味的差分で変更を検証するスキル。テキスト差分ではなく「最終的に有効なプロパティ値」レベルで比較するため、後勝ちルールや `!important` の影響も正確に把握できる。
+`@svjunic/css-diff` を使い、CSSカスケードルールを踏まえた意味的差分で変更を検証するスキル。テキスト差分ではなく「最終的に有効なプロパティ値」レベルで比較するため、後勝ちルールや `!important` の影響も正確に把握できる。
 
 ## 前提条件
 
@@ -16,8 +16,10 @@ allowed-tools:
 - スキルディレクトリで `npm ci` を実行済みであること（初回セットアップ）
 
 ```bash
-cd .claude/skills/css-verify-npm && npm ci
+cd <SKILL_DIR> && npm ci
 ```
+
+> `<SKILL_DIR>` = このスキルが読み込まれた際に表示される `Base directory for this skill:` のパス。以降の手順でも同様に使用すること。
 
 ## 実行手順
 
@@ -39,7 +41,7 @@ git diff --name-only HEAD -- '*.css' '*.scss' '*.sass'
 git show HEAD:<filepath> > /tmp/css-verify-old.css 2>/dev/null || echo "" > /tmp/css-verify-old.css
 
 # 意味的差分を JSON で取得（--filter all で全ステータスを取得）
-npx --yes @svjunic/css-diff /tmp/css-verify-old.css <filepath> --format json --filter all
+node <SKILL_DIR>/node_modules/.bin/css-diff /tmp/css-verify-old.css <filepath> --format json --filter all
 ```
 
 終了コードの意味：

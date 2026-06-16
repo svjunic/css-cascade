@@ -13,8 +13,13 @@ allowed-tools:
 ## 前提条件
 
 - Node.js 18.3.0 以上
-- プロジェクトルートに `bin/css-diff.js` が存在すること
-- または `.claude/skills/css-verify/node_modules/.bin/css-diff` が利用可能なこと
+- スキルディレクトリで `npm ci` を実行済みであること（初回セットアップ）
+
+```bash
+cd <SKILL_DIR> && npm ci
+```
+
+> `<SKILL_DIR>` = このスキルが読み込まれた際に表示される `Base directory for this skill:` のパス。以降の手順でも同様に使用すること。
 
 ## 実行手順
 
@@ -36,7 +41,7 @@ git diff --name-only HEAD -- '*.css' '*.scss' '*.sass'
 git show HEAD:<filepath> > /tmp/css-verify-old.css 2>/dev/null || echo "" > /tmp/css-verify-old.css
 
 # 意味的差分を JSON で取得（--filter all で全ステータスを取得）
-node ./bin/css-diff.js /tmp/css-verify-old.css <filepath> --format json --filter all
+node <SKILL_DIR>/bin/css-diff.js /tmp/css-verify-old.css <filepath> --format json --filter all
 ```
 
 終了コードの意味：
@@ -95,5 +100,5 @@ Summary: 1 changed, 1 added
 | エラー               | 原因                          | 対処                                             |
 | -------------------- | ----------------------------- | ------------------------------------------------ |
 | `Exit code 2`        | CSSパースエラー               | ファイルの構文エラーを確認                       |
-| `Cannot find module` | bin/css-diff.jsが見つからない | プロジェクトルートから実行しているか確認         |
+| `Cannot find module` | bin/css-diff.jsが見つからない | `npm ci` をスキルディレクトリで実行したか確認   |
 | git showがエラー     | 新規追加ファイル              | 空ファイルを旧バージョンとして使用（Step 2参照） |
