@@ -13,11 +13,6 @@ allowed-tools:
 ## 前提条件
 
 - Node.js 18.3.0 以上
-- スキルディレクトリで `npm ci` を実行済みであること（初回セットアップ）
-
-```bash
-cd <SKILL_DIR> && npm ci
-```
 
 > `<SKILL_DIR>` = このスキルが読み込まれた際に表示される `Base directory for this skill:` のパス。以降の手順でも同様に使用すること。
 
@@ -41,7 +36,7 @@ git diff --name-only HEAD -- '*.css' '*.scss' '*.sass'
 git show HEAD:<filepath> > /tmp/css-verify-old.css 2>/dev/null || echo "" > /tmp/css-verify-old.css
 
 # 意味的差分を JSON で取得（--filter all で全ステータスを取得）
-node <SKILL_DIR>/bin/css-diff.js /tmp/css-verify-old.css <filepath> --format json --filter all
+node <SKILL_DIR>/bin/css-diff.cjs /tmp/css-verify-old.css <filepath> --format json --filter all
 ```
 
 終了コードの意味：

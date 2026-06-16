@@ -1,27 +1,31 @@
 #!/usr/bin/env node
 /**
- * ビルド後に bin/ と src/core/ を css-verify スキルへ同期する。
+ * ビルド後に css-diff CLI を css-verify スキルへバンドルして同期する。
  * package.json の postbuild から呼ばれる。
+ *
+ * bin/css-diff.js + src/core/*.js + postcss を単一の CJS ファイルにバンドルするため、
+ * スキルディレクトリに node_modules は不要。
  */
-import { copyFileSync, mkdirSync, readdirSync } from "fs";
-import { join, dirname } from "path";
+import { buildSync } from "esbuild";
+import { mkdirSync } from "fs";
+import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const SKILL_DIR = join(ROOT, ".claude/skills/css-verify");
+const OUT = join(ROOT, ".claude/skills/css-verify/bin/css-diff.cjs");
 
-const copies = [
-  [join(ROOT, "bin/css-diff.js"), join(SKILL_DIR, "bin/css-diff.js")],
-  ...readdirSync(join(ROOT, "src/core"))
-    .filter((f) => f.endsWith(".js"))
-    .map((f) => [join(ROOT, "src/core", f), join(SKILL_DIR, "src/core", f)]),
-];
+mkdirSync(dirname(OUT), { recursive: true });
 
-mkdirSync(join(SKILL_DIR, "bin"), { recursive: true });
-mkdirSync(join(SKILL_DIR, "src/core"), { recursive: true });
+buildSync({
+  entryPoints: [join(ROOT, "bin/css-diff.js")],
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  outfile: OUT,
+  target: "node18",
+  // import.meta.url は --version フラグのパッケージ読み込みにのみ使用。
+  // バンドル後は空になるが、差分検証機能には影響しない。
+  logLevel: "error",
+});
 
-for (const [src, dest] of copies) {
-  copyFileSync(src, dest);
-}
-
-console.log(`✓ synced ${copies.length} files to .claude/skills/css-verify/`);
+console.log("✓ bundled css-diff CLI to .claude/skills/css-verify/bin/css-diff.cjs");
