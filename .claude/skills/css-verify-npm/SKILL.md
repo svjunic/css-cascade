@@ -31,17 +31,33 @@ git diff --name-only HEAD -- '*.css' '*.scss' '*.sass'
 
 変更ファイルが0件の場合は「検証対象なし（未コミットのCSS変更がありません）」と報告して終了。
 
-### Step 2: ファイルごとに意味的差分を取得する
+### Step 2: 全変更ファイルを連結して意味的差分を取得する
 
-変更されたファイルそれぞれに対して以下を実行する。
+変更されたファイルをすべて連結して1回だけ比較する（ファイルをまたぐセレクタ順序変化も検出するため）。
 
 ```bash
-# git HEADの旧バージョンを一時ファイルに書き出す
-# 新規追加ファイルの場合（git showがエラーになる場合）は空ファイルで代替
-git show HEAD:<filepath> > /tmp/css-verify-old.css 2>/dev/null || echo "" > /tmp/css-verify-old.css
+# 連結ファイルを初期化
+> /tmp/css-verify-old-full.css
+> /tmp/css-verify-new-full.css
 
-# 意味的差分を JSON で取得（--filter all で全ステータスを取得）
-node <SKILL_DIR>/node_modules/.bin/css-diff /tmp/css-verify-old.css <filepath> --format json --filter all
+# 変更ファイルをアルファベット順で連結（順序を old/new で揃えるため）
+for filepath in $(git diff --name-only HEAD -- '*.css' '*.scss' '*.sass' | sort); do
+  git show HEAD:${filepath} >> /tmp/css-verify-old-full.css 2>/dev/null || true
+  printf "\n" >> /tmp/css-verify-old-full.css
+  cat ${filepath} >> /tmp/css-verify-new-full.css
+  printf "\n" >> /tmp/css-verify-new-full.css
+done
+
+# 大容量ファイル対応: 200KB超の場合は変更差分のみに絞る
+COMBINED_SIZE=$(wc -c < /tmp/css-verify-new-full.css)
+FILTER_OPT="--filter all"
+if [ "$COMBINED_SIZE" -gt 204800 ]; then
+  FILTER_OPT="--filter changed"
+fi
+
+# 全体ソースで1回だけ比較（--order-risk でファイル間の順序変更も検出）
+node <SKILL_DIR>/node_modules/.bin/css-diff /tmp/css-verify-old-full.css /tmp/css-verify-new-full.css \
+  --format json $FILTER_OPT --order-risk
 ```
 
 終了コードの意味：
@@ -53,6 +69,8 @@ node <SKILL_DIR>/node_modules/.bin/css-diff /tmp/css-verify-old.css <filepath> -
 ### Step 3: 結果を解釈・報告する
 
 JSON出力の `summary` と `contexts` を読み取り、以下の観点でレポートする。
+
+**大量変更時（`changed + added + removed` 合計が 50 件超）:** `summary` と `orderRisks` のみ報告し、`contexts` の詳細は省略して「変更件数が多いため詳細は省略、直接ファイルを確認してください」と案内する。
 
 **変更の確認ポイント：**
 
