@@ -49,46 +49,52 @@ for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
 done
 ```
 
-#### Step 2b: 全変更ファイルを連結してClaudeが読むための意味的差分を取得する
+#### Step 2b: 各ファイルを並列で比較してClaudeが読むための意味的差分を取得する
 
-ファイルをまたぐセレクタ順序変化も検出するため、全体を連結して1回だけ比較する。
+各ファイルを並列処理し、終了後にソート順で結合して出力する。
 
 ```bash
-> /tmp/css-verify-old-full.css
-> /tmp/css-verify-new-full.css
+WORK_DIR=$(mktemp -d)
 
 for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
-  git show HEAD:${filepath} >> /tmp/css-verify-old-full.css 2>/dev/null || true
-  printf "\n" >> /tmp/css-verify-old-full.css
-  cat ${filepath} >> /tmp/css-verify-new-full.css
-  printf "\n" >> /tmp/css-verify-new-full.css
+  (
+    SLUG=$(echo "$filepath" | tr '/' '-')
+    OLD="$WORK_DIR/old-${SLUG}.css"
+    OUT="$WORK_DIR/out-${SLUG}.txt"
+    git show HEAD:${filepath} > "$OLD" 2>/dev/null || > "$OLD"
+    echo "=== $filepath ===" > "$OUT"
+    node <SKILL_DIR>/bin/css-diff.cjs "$OLD" "${filepath}" \
+      --format json --order-risk --filter all >> "$OUT" 2>&1
+    echo $? > "$WORK_DIR/exit-${SLUG}.code"
+  ) &
 done
 
-# 大容量ファイル対応: 50KB超の場合は変更差分のみに絞る
-COMBINED_SIZE=$(wc -c < /tmp/css-verify-new-full.css)
-FILTER_OPT="--filter all"
-if [ "$COMBINED_SIZE" -gt 51200 ]; then
-  FILTER_OPT="--filter changed"
-fi
+wait
 
-# 注意: フォアグラウンドで実行すること（run_in_background や Monitor は使用しない）
-timeout 120 node <SKILL_DIR>/bin/css-diff.cjs /tmp/css-verify-old-full.css /tmp/css-verify-new-full.css \
-  --format json --order-risk $FILTER_OPT
+OVERALL_EXIT=0
+for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
+  SLUG=$(echo "$filepath" | tr '/' '-')
+  cat "$WORK_DIR/out-${SLUG}.txt"
+  FILE_EXIT=$(cat "$WORK_DIR/exit-${SLUG}.code" 2>/dev/null || echo 0)
+  [ "$FILE_EXIT" -gt "$OVERALL_EXIT" ] && OVERALL_EXIT=$FILE_EXIT
+done
+
+rm -rf "$WORK_DIR"
+exit $OVERALL_EXIT
 ```
 
-終了コードの意味：
+終了コードの意味（`OVERALL_EXIT` = 全ファイル中の最大値）：
 
-- `0` → 差分なし
-- `1` → 差分あり（JSON出力を解析する）
+- `0` → 差分なし（全ファイル）
+- `1` → 差分あり（いずれか1ファイル以上）
 - `2` → エラー（ファイル読み込み失敗・CSSパースエラー）
-- `124` → タイムアウト（ファイルが大きすぎて120秒以内に完了しなかった）→ Step 3 で HTMLレポートのみ案内する
 
 ### Step 3: 結果を解釈・報告する
 
-Step 2b の JSON出力の `summary` と `contexts` を読み取り、以下の観点でレポートする。
+Step 2b の出力は `=== filepath ===` セパレータで区切られたファイルごとの JSON ブロックになっている。各ファイルの `summary` と `contexts` を読み取り、ファイルごとに報告する。
 **HTMLレポートのパスを必ず表示すること。**
 
-**大量変更時（`changed + added + removed` 合計が 50 件超）:** `summary` のみ報告し、「変更件数が多いため詳細はHTMLレポートを参照してください」と案内する。
+**大量変更時（ファイル全体で `changed + added + removed` 合計が 50 件超）:** `summary` のみ報告し、「変更件数が多いため詳細はHTMLレポートを参照してください」と案内する。
 
 **変更の確認ポイント：**
 
@@ -117,7 +123,6 @@ HTMLレポートで詳細を確認してください:
 - プロパティ変更あり → 変更内容が「意図した変更の直接的な結果」か「副作用」かを区別して報告。HTMLレポートも案内する
 - プロパティ変更ゼロ・順序変更あり → `⚠️ **順序変更が検出されました**` と警告し、HTMLレポートへ誘導する
 - 差分なし（exit code 0）かつ順序変更なし → 問題なしと報告
-- タイムアウト（exit code 124）→ 「ファイルが大きすぎてJSON解析がタイムアウトしました。HTMLレポートで確認してください」と報告し、HTMLレポートパスを案内する
 
 ## エラー対処
 
