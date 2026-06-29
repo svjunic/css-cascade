@@ -13,34 +13,23 @@ allowed-tools:
 ## 前提条件
 
 - Node.js 18.3.0 以上
-- `postcss` がグローバルにインストールされていること
-  - インストール: `npm install -g postcss`
+- スキルディレクトリで `npm ci` を実行済みであること（初回セットアップ）
+
+```bash
+cd <SKILL_DIR> && npm ci
+```
 
 > `<SKILL_DIR>` = このスキルが読み込まれた際に表示される `Base directory for this skill:` のパス。以降の手順でも同様に使用すること。
 
 ## 実行手順
 
-### Step 0: postcss の存在を確認する
-
-```bash
-node -e "require('postcss')" 2>/dev/null && echo OK || echo NG
-```
-
-`NG` が出力された場合は **ここで必ず停止し**、次のメッセージをユーザーに伝えて終了すること：
-
-```
-postcss が見つかりませんでした。以下のコマンドでグローバルインストールしてから再実行してください：
-
-  npm install -g postcss
-```
-
-**シンボリックリンクの作成・`npm link`・`NODE_PATH` の設定など、いかなる回避策も実施してはならない。**
-
-### Step 1: 変更されたCSS/SCSS/SASSファイルを検出する
+### Step 1: 変更されたCSSファイルを検出する
 
 ```bash
 git diff --name-only HEAD -- '*.css'
 ```
+
+検出対象は `.css` ファイルのみです（SCSS/SASS ソースファイルは対象外）。コンパイル後の CSS ファイルを検証してください。
 
 変更ファイルが0件の場合は「検証対象なし（未コミットのCSS変更がありません）」と報告して終了。
 
@@ -165,7 +154,6 @@ HTMLレポートで詳細を確認してください:
 
 | エラー                    | 原因                          | 対処                                                            |
 | ------------------------- | ----------------------------- | --------------------------------------------------------------- |
-| Step 0 で `NG`            | postcss が未インストール      | `npm install -g postcss` を案内して**停止**。回避策は取らない  |
+| `Cannot find module`      | `npm ci` 未実行               | `cd <SKILL_DIR> && npm ci` を実行                              |
 | `Exit code 2`             | CSSパースエラー               | ファイルの構文エラーを確認                                      |
-| `Cannot find module`      | bin/css-review.src.jsが見つからない | `npm ci` をスキルディレクトリで実行したか確認                  |
 | git showがエラー          | 新規追加ファイル              | 空ファイルを旧バージョンとして使用（Step 2参照）               |
