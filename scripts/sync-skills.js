@@ -5,8 +5,8 @@
  *
  * 生成物:
  *   bin/css-diff.cjs                              — minified CJS CLI (bin/css-diff.src.js から生成)
- *   .claude/skills/css-verify/                   — ESM ソースファイル一式 (ビルド成果物なし)
- *   .claude/skills/css-verify-npm/hooks/posttooluse.js — minified hook スクリプト
+ *   .claude/skills/css-review/                   — ESM ソースファイル一式 (ビルド成果物なし)
+ *   .claude/skills/css-review-npm/hooks/posttooluse.js — minified hook スクリプト
  */
 import { buildSync } from "esbuild";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "fs";
@@ -38,8 +38,8 @@ buildSync({
 });
 console.log("✓ minified bin/css-diff.cjs");
 
-// ── 2. css-verify スキル向け ESM ソースファイルをコピー ──────────────────────
-const SKILL_DIR = join(ROOT, ".claude/skills/css-verify");
+// ── 2. css-review スキル向け ESM ソースファイルをコピー ──────────────────────
+const SKILL_DIR = join(ROOT, ".claude/skills/css-review");
 mkdirSync(join(SKILL_DIR, "bin"), { recursive: true });
 mkdirSync(join(SKILL_DIR, "src/reporters"), { recursive: true });
 mkdirSync(join(SKILL_DIR, "src/ui"), { recursive: true });
@@ -50,13 +50,13 @@ cpSync(join(ROOT, "src/reporters/html.js"), join(SKILL_DIR, "src/reporters/html.
 cpSync(join(ROOT, "src/ui/render.js"), join(SKILL_DIR, "src/ui/render.js"), { force: true });
 cpSync(join(ROOT, "src/styles.css"), join(SKILL_DIR, "src/styles.css"), { force: true });
 writeFileSync(join(SKILL_DIR, "package.json"), JSON.stringify({ type: "module" }, null, 2) + "\n");
-console.log("✓ copied ESM sources to .claude/skills/css-verify/");
+console.log("✓ copied ESM sources to .claude/skills/css-review/");
 
-// ── 3. css-verify-npm スキルの hook スクリプト (minified) ─────────────────────
-const HOOK_OUT = join(ROOT, ".claude/skills/css-verify-npm/hooks/posttooluse.js");
+// ── 3. css-review-npm スキルの hook スクリプト (minified) ─────────────────────
+const HOOK_OUT = join(ROOT, ".claude/skills/css-review-npm/hooks/posttooluse.js");
 
 buildSync({
-  entryPoints: [join(ROOT, ".claude/skills/css-verify-npm/hooks/posttooluse.src.js")],
+  entryPoints: [join(ROOT, ".claude/skills/css-review-npm/hooks/posttooluse.src.js")],
   bundle: false,
   platform: "node",
   format: "esm",
@@ -66,4 +66,4 @@ buildSync({
   banner: { js: COPYRIGHT },
   logLevel: "error",
 });
-console.log("✓ minified .claude/skills/css-verify-npm/hooks/posttooluse.js");
+console.log("✓ minified .claude/skills/css-review-npm/hooks/posttooluse.js");

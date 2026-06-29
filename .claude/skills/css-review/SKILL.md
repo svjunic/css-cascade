@@ -1,6 +1,6 @@
 ---
-name: css-verify
-description: SASSやCSSを修正した後に最終的なスタイル変更が想定通りか検証するスキル。「CSS確認して」「スタイル変更を検証して」「/css-verify」「css変更を確認」「CSSの差分を見せて」などのフレーズが出た時に使用。プロジェクト内のスクリプトを使ってCSSの意味的差分を確認する（社内・開発環境向け）。
+name: css-review
+description: SASSやCSSを修正した後に最終的なスタイル変更が想定通りか検証するスキル。「CSS確認して」「スタイル変更を検証して」「/css-review」「css変更を確認」「CSSの差分を見せて」などのフレーズが出た時に使用。プロジェクト内のスクリプトを使ってCSSの意味的差分を確認する（社内・開発環境向け）。
 allowed-tools:
   - Bash
   - Read
@@ -51,17 +51,17 @@ git diff --name-only HEAD -- '*.css'
 
 #### Step 2a: 各ファイルのHTMLレポートを生成する
 
-変更された各ファイルを個別に比較し、HTMLレポートを `css-verify-report/` に出力する。
+変更された各ファイルを個別に比較し、HTMLレポートを `css-review-report/` に出力する。
 セレクタ順序の変更も検出するため `--order-risk` を常に付与する。
 
 ```bash
-mkdir -p css-verify-report
+mkdir -p css-review-report
 
 for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
-  git show HEAD:${filepath} > /tmp/css-verify-old-one.css 2>/dev/null || > /tmp/css-verify-old-one.css
-  OUTPUT_HTML="css-verify-report/$(echo "$filepath" | sed 's|/|--|g').html"
+  git show HEAD:${filepath} > /tmp/css-review-old-one.css 2>/dev/null || > /tmp/css-review-old-one.css
+  OUTPUT_HTML="css-review-report/$(echo "$filepath" | sed 's|/|--|g').html"
   node <SKILL_DIR>/bin/css-diff.src.js \
-    /tmp/css-verify-old-one.css ${filepath} \
+    /tmp/css-review-old-one.css ${filepath} \
     --format html --order-risk > "$OUTPUT_HTML" 2>&1 || true
   echo "HTMLレポート: $OUTPUT_HTML"
 done
@@ -131,7 +131,7 @@ JSON の `orderRisks` フィールドを確認する。`hasWarning: true` のエ
 セレクタの並び順が変更されています。想定通りの変更か確認してください。
 
 HTMLレポートで詳細を確認してください:
-→ css-verify-report/docs--common.css.html
+→ css-review-report/docs--common.css.html
 ```
 
 **エージェントとしての判断：**
@@ -141,6 +141,25 @@ HTMLレポートで詳細を確認してください:
 - プロパティ変更あり → 変更内容が「意図した変更の直接的な結果」か「副作用」かを区別して報告。HTMLレポートも案内する
 - プロパティ変更ゼロ・順序変更あり → `⚠️ **順序変更が検出されました**` と警告し、HTMLレポートへ誘導する
 - 差分なし（exit code 0）かつ順序変更なし → 問題なしと報告
+
+**プロパティ名の検証：**
+
+差分の全コンテキストに含まれるすべての `prop` 値（`added`・`changed`・`removed` のすべてのステータスが対象）を確認し、以下の条件をすべて満たすものを「標準外プロパティ」としてフラグを立てる：
+
+1. `--` で始まるCSSカスタムプロパティでないこと（例: `--primary-color` は除外）
+2. `-webkit-`・`-moz-`・`-ms-`・`-o-` などのベンダープレフィックスで始まらないこと
+3. 標準のCSSプロパティとして認識できないこと（Claudeの知識で判断）
+
+標準外プロパティが見つかった場合は以下の形式で報告する：
+
+```
+⚠️ **標準外のプロパティ名が含まれています**
+以下のプロパティはCSSの標準プロパティではありません。タイポの可能性があります：
+- `disyplay`（`display` の間違いでしょうか？）
+```
+
+- 候補が推測できる場合はサジェストする
+- 推測が難しい場合は「標準CSSプロパティではありません」とだけ伝える
 
 ## エラー対処
 
