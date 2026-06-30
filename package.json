@@ -1,16 +1,16 @@
 {
-  "name": "@svjunic/css-review",
+  "name": "@svjunic/css-cascade",
   "version": "0.2.0",
   "description": "CSS structural diff tool — compares effective CSS properties between two files",
   "type": "module",
   "bin": {
-    "css-review": "bin/css-review.cjs"
+    "css-cascade": "bin/css-cascade.cjs"
   },
   "exports": {
     ".": "./src/core/index.js"
   },
   "files": [
-    "bin/css-review.cjs",
+    "bin/css-cascade.cjs",
     "src/core/",
     "src/ui/render.js",
     "src/reporters/",
@@ -45,7 +45,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/svjunic/css-review.git"
+    "url": "git+https://github.com/svjunic/css-cascade.git"
   },
   "publishConfig": {}
 }

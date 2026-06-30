@@ -1,6 +1,6 @@
 # Web UI
 
-**Github Pages:** [https://svjunic.github.io/sv-css-diff/](https://svjunic.github.io/sv-css-diff/)
+**Github Pages:** [https://svjunic.github.io/css-cascade/](https://svjunic.github.io/css-cascade/)
 
 ヽ(´ー｀)ノ＜ Github Pages で公開しているので、ローカルで立ち上げる必要はないよ！
 

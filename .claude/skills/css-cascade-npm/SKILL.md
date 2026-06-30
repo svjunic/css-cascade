@@ -1,6 +1,6 @@
 ---
 name: css-cascade-npm
-description: テストが書けない大規模CSSにおいて、変更によるカスケードリスク（セレクタの競合・順序変更による意図しない上書き）を検出するスキル。「/css-cascade」「CSSのカスケードリスクを確認して」「CSSの変更影響を確認して」「CSS変更でカスケードが壊れていないか確認して」などのフレーズが出た時に使用。@svjunic/css-reviewをnpm経由で取得してCSSの意味的差分を確認する（公開・汎用向け）。
+description: テストが書けない大規模CSSにおいて、変更によるカスケードリスク（セレクタの競合・順序変更による意図しない上書き）を検出するスキル。「/css-cascade」「CSSのカスケードリスクを確認して」「CSSの変更影響を確認して」「CSS変更でカスケードが壊れていないか確認して」などのフレーズが出た時に使用。@svjunic/css-cascadeをnpm経由で取得してCSSの意味的差分を確認する（公開・汎用向け）。
 allowed-tools:
   - Bash
   - Read
@@ -8,7 +8,7 @@ allowed-tools:
 
 # CSS カスケードリスク確認スキル（npm版）
 
-`@svjunic/css-review` を使い、CSSカスケードルールを踏まえた意味的差分で変更を検証するスキル。テキスト差分ではなく「最終的に有効なプロパティ値」レベルで比較するため、後勝ちルールや `!important` の影響も正確に把握できる。
+`@svjunic/css-cascade` を使い、CSSカスケードルールを踏まえた意味的差分で変更を検証するスキル。テキスト差分ではなく「最終的に有効なプロパティ値」レベルで比較するため、後勝ちルールや `!important` の影響も正確に把握できる。
 
 ## 前提条件
 
@@ -49,7 +49,7 @@ mkdir -p css-cascade-report
 for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
   git show HEAD:${filepath} > /tmp/css-cascade-old-one.css 2>/dev/null || > /tmp/css-cascade-old-one.css
   OUTPUT_HTML="css-cascade-report/$(echo "$filepath" | sed 's|/|--|g').html"
-  node <SKILL_DIR>/node_modules/.bin/css-review \
+  node <SKILL_DIR>/node_modules/.bin/css-cascade \
     /tmp/css-cascade-old-one.css ${filepath} \
     --format html --order-risk > "$OUTPUT_HTML" 2>&1 || true
   echo "HTMLレポート: $OUTPUT_HTML"
@@ -70,7 +70,7 @@ for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
     OUT="$WORK_DIR/out-${SLUG}.txt"
     git show HEAD:${filepath} > "$OLD" 2>/dev/null || > "$OLD"
     echo "=== $filepath ===" > "$OUT"
-    node <SKILL_DIR>/node_modules/.bin/css-review "$OLD" "${filepath}" \
+    node <SKILL_DIR>/node_modules/.bin/css-cascade "$OLD" "${filepath}" \
       --format json --order-risk --filter all >> "$OUT" 2>&1
     echo $? > "$WORK_DIR/exit-${SLUG}.code"
   ) &
@@ -196,5 +196,5 @@ cd .claude/skills/css-cascade-npm && npm ci
 | エラー                               | 原因                     | 対処                                             |
 | ------------------------------------ | ------------------------ | ------------------------------------------------ |
 | `Exit code 2`                        | CSSパースエラー          | ファイルの構文エラーを確認                       |
-| `@svjunic/css-review が見つかりません` | パッケージ未インストール | `npm install @svjunic/css-review` を実行           |
+| `@svjunic/css-cascade が見つかりません` | パッケージ未インストール | `npm install @svjunic/css-cascade` を実行           |
 | git showがエラー                     | 新規追加ファイル         | 空ファイルを旧バージョンとして使用（Step 2参照） |
