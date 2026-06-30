@@ -33,6 +33,20 @@ describe('computeSpecificity', () => {
   it('ユニバーサルセレクタ * は 0', () => {
     expect(computeSpecificity('*')).toEqual([0, 0, 0])
   })
+
+  it(':not() 単一引数の詳細度を引き継ぐ', () => {
+    expect(computeSpecificity(':not(.a)')).toEqual([0, 1, 0])
+  })
+  it(':not() カンマ区切り複数引数は最大値を採用する (CSS L4)', () => {
+    expect(computeSpecificity(':not(.a, .b)')).toEqual([0, 1, 0])
+    expect(computeSpecificity(':not(.a, #id)')).toEqual([1, 0, 0])
+  })
+  it(':not() 内の括弧ありセレクタ (:is()) でカンマを誤分割しない', () => {
+    expect(computeSpecificity(':not(:is(.a, .b))')).toEqual([0, 1, 0])
+  })
+  it(':not() 内の括弧ありセレクタ (:nth-child()) でカンマを誤分割しない', () => {
+    expect(computeSpecificity(':not(:nth-child(2n of .a, .b))')).toEqual([0, 1, 0])
+  })
 })
 
 describe('sameSpecificity', () => {

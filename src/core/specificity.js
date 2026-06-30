@@ -14,6 +14,22 @@
  * @param {string} selector
  * @returns {[number, number, number]}
  */
+function splitTopLevelCommas(str) {
+  const parts = []
+  let depth = 0, start = 0
+  for (let i = 0; i < str.length; i++) {
+    if (str[i] === '(') depth++
+    else if (str[i] === ')') depth--
+    else if (str[i] === ',' && depth === 0) {
+      parts.push(str.slice(start, i).trim())
+      start = i + 1
+    }
+  }
+  const last = str.slice(start).trim()
+  if (last) parts.push(last)
+  return parts
+}
+
 export function computeSpecificity(selector) {
   let s = selector
   let a = 0, b = 0, c = 0
@@ -25,14 +41,19 @@ export function computeSpecificity(selector) {
   s = s.replace(/\[[^\]]*\]/g, () => { b++; return '' })
 
   // :not() は引数の詳細度を引き継ぐ（CSS Selectors Level 3/4）。:not() 自体は b++ しない
+  // CSS Selectors Level 4: カンマ区切りの引数リストは最大詳細度を採用する
   // ネストした括弧 (:not(:nth-child(2n)) 等) に対応するため (?:[^()]*|\([^)]*\))* を使う
-  // 置換をチェインして二重カウントを防ぐ（擬似クラスを先に消し残った要素名を最後にカウント）
   s = s.replace(/:not\(\s*((?:[^()]*|\([^)]*\))*)\s*\)/gi, (_, inner) => {
-    let i = inner
-    i = i.replace(/#[\w-]+/g, () => { a++; return '' })
-    i = i.replace(/:[^:\s>+~([\].#]+(?:\([^)]*\))?/g, () => { b++; return '' })
-    i = i.replace(/\.[\w-]+/g, () => { b++; return '' })
-    c += i.split(/\s+/).filter(t => t && t !== '*' && /^[a-zA-Z][\w-]*/.test(t)).length
+    // トップレベルのカンマのみで分割（括弧内のカンマは無視）
+    const args = splitTopLevelCommas(inner)
+    let maxA = 0, maxB = 0, maxC = 0
+    for (const arg of args) {
+      const [ia, ib, ic] = computeSpecificity(arg)
+      if (ia > maxA || (ia === maxA && ib > maxB) || (ia === maxA && ib === maxB && ic > maxC)) {
+        maxA = ia; maxB = ib; maxC = ic
+      }
+    }
+    a += maxA; b += maxB; c += maxC
     return ''
   })
 

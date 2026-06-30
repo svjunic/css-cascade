@@ -88,8 +88,8 @@ export function canonicalizeValue(value) {
   v = v.replace(/\s*,\s*/g, ',')
   // * / 周辺の空白を除去
   v = v.replace(/\s*([*/])\s*/g, '$1')
-  // 先頭ゼロ補完: 数値の前に空白・カンマ・括弧がある場合、または行頭
-  v = v.replace(/(^|[\s,(])\.(\d)/g, '$10.$2')
+  // 先頭ゼロ補完: 数値の前に空白・カンマ・括弧がある場合、または行頭（負符号も考慮）
+  v = v.replace(/(^|[\s,(])(-?)\.(\d)/g, (_, pre, sign, digit) => `${pre}${sign}0.${digit}`)
   // 16進カラー正規化
   v = v.replace(/#[0-9a-fA-F]{3,8}\b/g, m => normalizeHex(m))
   return v
