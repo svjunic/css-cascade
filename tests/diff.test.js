@@ -178,6 +178,20 @@ describe('diff: ignoreCosmetic — 表記揺れを無視した比較', () => {
     expect(getPropDiff(result, 'base', '.a', 'margin')?.status).toBe('unchanged')
   })
 
+  it('負の先頭ゼロ省略 (-.2em vs -0.2em) は unchanged になる', () => {
+    const old = `.a { margin: -0.2em; }`
+    const next = `.a { margin: -.2em; }`
+    const result = diffCss(old, next, { ignoreCosmetic: true })
+    expect(getPropDiff(result, 'base', '.a', 'margin')?.status).toBe('unchanged')
+  })
+
+  it('calc 内の負の先頭ゼロ省略 (-.5em) は unchanged になる', () => {
+    const old = `.a { margin: calc(-0.5em + 1px); }`
+    const next = `.a { margin: calc(-.5em + 1px); }`
+    const result = diffCss(old, next, { ignoreCosmetic: true })
+    expect(getPropDiff(result, 'base', '.a', 'margin')?.status).toBe('unchanged')
+  })
+
   it('16進カラーの大文字小文字・短縮形は unchanged になる', () => {
     const old = `.a { color: #FFF; }`
     const next = `.a { color: #ffffff; }`
