@@ -3,7 +3,8 @@
  * PostCSS を使って CSS テキストを中間モデルに変換する。
  *
  * 出力: Map<contextKey, Array<{selector, prop, value, important, layerRank}>>
- *   - contextKey: "base" | "@media <condition>" | "@font-face" | "@keyframes <name>"
+ *   - contextKey: "base" | "@media <condition>" | "@supports <condition>" | "@container <condition>" | "@font-face" | "@keyframes <name>"
+ *     （@media/@supports/@container のネストは条件を "and" で結合したキーになる）
  *   - グループセレクタ (.a, .b) は個別セレクタに分解して配布
  *   - ソース順を保持（後勝ちルール適用のため）
  *   - layerRank: @layer のカスケード優先度（大きいほど強い。resolve.js で勝者決定に使用）
@@ -36,6 +37,65 @@ function getFontFaceKey(declarations) {
  */
 function normalizeKeyframesName(atRuleName, params) {
   return `@keyframes ${params.trim()}`
+}
+
+/**
+ * 条件付きグループルール（それぞれ独立したカスケードコンテキストを作る @ルール）。
+ * @media / @supports / @container は条件ごとに別コンテキストへ分離する。
+ */
+const CONDITIONAL_AT_RULES = new Set(['media', 'supports', 'container'])
+
+// 条件集合 (conds) は Map<name, string[]>。name は media/supports/container で、
+// 値はその種別でネストされた条件の並び。ネストを降りるたび appendCondition で
+// 複製・追記し、contextKeyFromConditions で正準コンテキストキーへ変換する。
+
+/**
+ * conds に条件を1つ追加した新しい Map を返す（元の conds は変更しない）。
+ * 正規化後に空となる条件（例: 条件を持たない不正な @media）はコンテキストを
+ * 分ける意味がないため無視する。
+ *
+ * @param {Map<string, string[]>} conds
+ * @param {string} name  @ルール名（小文字。media/supports/container）
+ * @param {string} condition  正規化済み条件文字列
+ * @returns {Map<string, string[]>}
+ */
+function appendCondition(conds, name, condition) {
+  const next = new Map()
+  for (const [k, v] of conds) next.set(k, v.slice())
+  if (condition) {
+    const list = next.get(name)
+    if (list) list.push(condition)
+    else next.set(name, [condition])
+  }
+  return next
+}
+
+/**
+ * 条件集合から正準コンテキストキーを生成する。
+ *
+ * 種別間（@media / @supports / @container）は CONDITIONAL_AT_RULES の定義順に
+ * 固定して連結する。どの種別が外側に来るかは論理 AND として等価な no-op のため、
+ * ネスト順序に依存しないキーにして偽陽性（コンテキストの追加/削除誤検出）を防ぐ。
+ *
+ * 一方、同種別内の複数条件は「ネスト出現順（外側→内側）」を保持する。これは
+ * 単一の複合条件 `@media (a) and (b)` の記述順と一致させ、かつ意味的差分ツールが
+ * 著者の記述順を尊重するため。ネスト `@media(a){@media(b)}` と複合
+ * `@media (a) and (b)` は同一キーに集約される。
+ *   - 条件なし                  → "base"
+ *   - @media(a) のみ            → "@media a"
+ *   - @media(a) 内 @media(b)     → "@media a and b"
+ *   - @media(a) 内 @supports(b)  → "@media a and @supports b"（種別ネスト順は不問で同一）
+ *
+ * @param {Map<string, string[]>} conds
+ * @returns {string}
+ */
+function contextKeyFromConditions(conds) {
+  const parts = []
+  for (const name of CONDITIONAL_AT_RULES) {
+    const list = conds.get(name)
+    if (list && list.length) parts.push(`@${name} ${list.join(' and ')}`)
+  }
+  return parts.length ? parts.join(' and ') : 'base'
 }
 
 /**
@@ -88,29 +148,31 @@ export function parseSelectorOrder(cssText, options = {}) {
 
   const normSel = options.semanticSelectors ? canonicalizeSelector : normalizeSelector
 
-  function processRule(rule, contextKey) {
+  function processRule(rule, conds) {
+    const contextKey = contextKeyFromConditions(conds)
     for (const sel of rule.selectors.map(s => normSel(s))) {
       addSel(contextKey, sel)
     }
   }
 
-  function processAtRule(atRule, parentContextKey) {
+  function processAtRule(atRule, conds) {
     const name = atRule.name.toLowerCase()
-    if (name === 'media') {
-      const condition = normalizeMediaCondition(atRule.params)
-      const contextKey = `@media ${condition}`
-      ensureCtx(contextKey)
+    if (CONDITIONAL_AT_RULES.has(name)) {
+      // @media / @supports / @container: 条件ごとに独立コンテキスト。
+      // ネスト条件を蓄積する。コンテキストは addSel 側で遅延生成する。
+      const childConds = appendCondition(conds, name, normalizeMediaCondition(atRule.params))
       atRule.each(node => {
-        if (node.type === 'rule') processRule(node, contextKey)
-        else if (node.type === 'atrule') processAtRule(node, contextKey)
+        if (node.type === 'rule') processRule(node, childConds)
+        else if (node.type === 'atrule') processAtRule(node, childConds)
       })
     } else if (name === 'font-face' || name === 'keyframes' || name === '-webkit-keyframes' || name === 'charset' || name === 'import' || name === 'namespace') {
       // cascade ordering に関係しないコンテキストはスキップ
     } else {
+      // @layer などその他の @ルール: 子ルールを親コンテキストに平坦化する（順序を保持）
       if (atRule.nodes) {
         atRule.each(node => {
-          if (node.type === 'rule') processRule(node, parentContextKey)
-          else if (node.type === 'atrule') processAtRule(node, parentContextKey)
+          if (node.type === 'rule') processRule(node, conds)
+          else if (node.type === 'atrule') processAtRule(node, conds)
         })
       }
     }
@@ -119,10 +181,11 @@ export function parseSelectorOrder(cssText, options = {}) {
   // パースエラーは握りつぶさず呼び出し元へ伝播させる（CLI は exit 2 とする）。
   const root = postcss.parse(cssText, { from: undefined })
 
-  ensureCtx('base')
+  // 各コンテキストは addSel 側で遅延生成する（空コンテキストは作らない）。
+  const baseConds = new Map()
   root.each(node => {
-    if (node.type === 'rule') processRule(node, 'base')
-    else if (node.type === 'atrule') processAtRule(node, 'base')
+    if (node.type === 'rule') processRule(node, baseConds)
+    else if (node.type === 'atrule') processAtRule(node, baseConds)
   })
 
   const result = new Map()
@@ -183,7 +246,8 @@ export function parseCss(cssText, options = {}) {
   const normSel = options.semanticSelectors ? canonicalizeSelector : normalizeSelector
 
   /** 通常の Rule ノードを処理する */
-  function processRule(rule, contextKey, layer) {
+  function processRule(rule, conds, layer) {
+    const contextKey = contextKeyFromConditions(conds)
     // グループセレクタを個別セレクタに分解
     const selectors = rule.selectors.map(s => normSel(s))
     for (const sel of selectors) {
@@ -196,20 +260,19 @@ export function parseCss(cssText, options = {}) {
   }
 
   /** AtRule ノードを再帰的に処理する */
-  function processAtRule(atRule, parentContextKey, layer) {
+  function processAtRule(atRule, conds, layer) {
     const name = atRule.name.toLowerCase()
 
-    if (name === 'media') {
-      // @media: 条件ごとに独立コンテキスト（レイヤーはそのまま引き継ぐ）
-      const condition = normalizeMediaCondition(atRule.params)
-      const contextKey = `@media ${condition}`
-      ensureContext(contextKey)
+    if (CONDITIONAL_AT_RULES.has(name)) {
+      // @media / @supports / @container: 条件ごとに独立コンテキスト（レイヤーはそのまま引き継ぐ）。
+      // ネスト条件を蓄積する。コンテキストは addDecl 側で遅延生成する。
+      const childConds = appendCondition(conds, name, normalizeMediaCondition(atRule.params))
       atRule.each(node => {
         if (node.type === 'rule') {
-          processRule(node, contextKey, layer)
+          processRule(node, childConds, layer)
         } else if (node.type === 'atrule') {
-          // ネストした @media や @supports、@layer 等
-          processAtRule(node, contextKey, layer)
+          // ネストした @media / @supports / @container や @layer 等
+          processAtRule(node, childConds, layer)
         }
       })
     } else if (name === 'layer') {
@@ -224,9 +287,9 @@ export function parseCss(cssText, options = {}) {
         registerLayer(layerName)
         atRule.each(node => {
           if (node.type === 'rule') {
-            processRule(node, parentContextKey, layerName)
+            processRule(node, conds, layerName)
           } else if (node.type === 'atrule') {
-            processAtRule(node, parentContextKey, layerName)
+            processAtRule(node, conds, layerName)
           }
         })
       } else {
@@ -269,13 +332,13 @@ export function parseCss(cssText, options = {}) {
     } else if (name === 'charset' || name === 'import' || name === 'namespace') {
       // skip
     } else {
-      // 未知の @ルール（@supports 等）: 子ルールがあれば親コンテキストに処理
+      // その他の @ルール（@scope 等）: 子ルールがあれば親コンテキストに平坦化する
       if (atRule.nodes) {
         atRule.each(node => {
           if (node.type === 'rule') {
-            processRule(node, parentContextKey, layer)
+            processRule(node, conds, layer)
           } else if (node.type === 'atrule') {
-            processAtRule(node, parentContextKey, layer)
+            processAtRule(node, conds, layer)
           }
         })
       }
@@ -285,14 +348,13 @@ export function parseCss(cssText, options = {}) {
   // パースエラーは握りつぶさず呼び出し元へ伝播させる（CLI は exit 2 とする）。
   const root = postcss.parse(cssText, { from: undefined })
 
-  // base コンテキストを最初に確保してキー順を安定させる
-  ensureContext('base')
-
+  // 各コンテキストは addDecl 側で遅延生成する（宣言のない空コンテキストは作らない）。
+  const baseConds = new Map()
   root.each(node => {
     if (node.type === 'rule') {
-      processRule(node, 'base', null)
+      processRule(node, baseConds, null)
     } else if (node.type === 'atrule') {
-      processAtRule(node, 'base', null)
+      processAtRule(node, baseConds, null)
     }
   })
 

@@ -101,6 +101,58 @@ describe('resolve: @media コンテキストの分離', () => {
     expect(props.get('color')?.value).toBe('blue')
     expect(props.get('margin')?.value).toBe('0')
   })
+
+  it('ネストした @media は親子条件を結合したコンテキストに入る', () => {
+    const css = `
+      @media (min-width: 600px) {
+        @media (hover: hover) {
+          .a { color: red; }
+        }
+      }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, '@media (min-width: 600px) and (hover: hover)', '.a').get('color')?.value).toBe('red')
+    expect(getProps(resolved, '@media (hover: hover)', '.a').size).toBe(0)
+    expect(getProps(resolved, 'base', '.a').size).toBe(0)
+  })
+})
+
+describe('resolve: 条件付き at-rule コンテキストの分離', () => {
+  it('@supports 内のルールは独立コンテキストに入り base と混ざらない', () => {
+    const css = `
+      .a { display: block; }
+      @supports (display: grid) { .a { display: grid; } }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, 'base', '.a').get('display')?.value).toBe('block')
+    expect(getProps(resolved, '@supports (display: grid)', '.a').get('display')?.value).toBe('grid')
+  })
+
+  it('@container 内のルールは独立コンテキストに入り base と混ざらない', () => {
+    const css = `
+      .card { padding: 8px; }
+      @container card (min-width: 320px) { .card { padding: 12px; } }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, 'base', '.card').get('padding')?.value).toBe('8px')
+    expect(getProps(resolved, '@container card (min-width: 320px)', '.card').get('padding')?.value).toBe('12px')
+  })
+
+  it('異種 at-rule のネストは順序に依存しない同一コンテキストに集約される', () => {
+    // @media 内 @supports と @supports 内 @media は論理 AND として等価なので
+    // 同じコンテキストキーに集約される（ネスト順序に依存しない）。
+    const mediaOuter = `@media (min-width: 600px) { @supports (display: grid) { .a { color: red; } } }`
+    const supportsOuter = `@supports (display: grid) { @media (min-width: 600px) { .a { color: red; } } }`
+
+    const keyMediaOuter = [...resolve(parseCss(mediaOuter)).keys()]
+    const keySupportsOuter = [...resolve(parseCss(supportsOuter)).keys()]
+
+    expect(keyMediaOuter).toEqual(keySupportsOuter)
+    expect(keyMediaOuter).toEqual(['@media (min-width: 600px) and @supports (display: grid)'])
+  })
 })
 
 describe('resolve: セレクタ正規化', () => {

@@ -10,7 +10,7 @@ import { diff } from '../core/diff.js'
 import { computeOrderRisks } from '../core/order-risk.js'
 import { initDropzone, updateDropzoneState } from './dropzone.js'
 import { createSearchIndex, search } from './fuzzy.js'
-import { renderDiff, summarizeDiff, renderOrderRisks } from './render.js'
+import { renderDiff, summarizeDiff, renderOrderRisks, esc } from './render.js'
 
 // ─── 状態 ─────────────────────────────────────────────────────────────────
 const state = {
@@ -142,7 +142,7 @@ function renderResults() {
   if (state.parseError) {
     resultsEl.innerHTML = `<div class="empty-state">
       <p>CSS の解析に失敗しました。</p>
-      <p class="empty-sub">${escapeHtml(state.parseError)}</p>
+      <p class="empty-sub">${esc(state.parseError)}</p>
     </div>`
     return
   }
@@ -258,7 +258,7 @@ function updateContextTabs() {
       ? `<span class="ctx-badge">${ctxDiff.changeCount}</span>`
       : ''
     const isActive = state.activeContext === ctxKey
-    buttons.push(`<button class="ctx-tab ${isActive ? 'active' : ''} ctx-tab--${ctxDiff.status}" data-ctx="${ctxKey}">${escapeHtml(label)}${badge}</button>`)
+    buttons.push(`<button class="ctx-tab ${isActive ? 'active' : ''} ctx-tab--${ctxDiff.status}" data-ctx="${esc(ctxKey)}">${esc(label)}${badge}</button>`)
   }
 
   contextTabsEl.innerHTML = buttons.join('')
@@ -271,13 +271,6 @@ function updateContextTabs() {
       renderResults()
     })
   })
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
 }
 
 // ─── イベント ─────────────────────────────────────────────────────────────

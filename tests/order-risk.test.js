@@ -103,6 +103,36 @@ describe('parseSelectorOrder', () => {
     expect(order.get('@media (max-width: 768px)')).toEqual(['.b'])
   })
 
+  it('ネストした @media は親子条件を結合したコンテキストで返す', () => {
+    const css = `
+      @media (min-width: 600px) {
+        @media (hover: hover) {
+          .a { color: red; }
+        }
+      }
+    `
+    const order = parseSelectorOrder(css)
+
+    expect(order.get('@media (min-width: 600px) and (hover: hover)')).toEqual(['.a'])
+    expect(order.has('@media (hover: hover)')).toBe(false)
+  })
+
+  it('@supports 内のセレクタを base ではなく @supports コンテキストで返す', () => {
+    const css = '.a { display: block; } @supports (display: grid) { .a { display: grid; } }'
+    const order = parseSelectorOrder(css)
+
+    expect(order.get('base')).toEqual(['.a'])
+    expect(order.get('@supports (display: grid)')).toEqual(['.a'])
+  })
+
+  it('@container 内のセレクタを base ではなく @container コンテキストで返す', () => {
+    const css = '.card { padding: 8px; } @container card (min-width: 320px) { .card { padding: 12px; } }'
+    const order = parseSelectorOrder(css)
+
+    expect(order.get('base')).toEqual(['.card'])
+    expect(order.get('@container card (min-width: 320px)')).toEqual(['.card'])
+  })
+
   it('同じセレクタが複数回登場した場合は最終出現位置を使う', () => {
     // .a が最後に出現 → 順序は .b, .a
     const css = '.a { color: red; } .b { color: blue; } .a { margin: 0; }'

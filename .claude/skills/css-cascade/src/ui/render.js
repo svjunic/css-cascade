@@ -4,13 +4,14 @@
  * フレームワーク非依存のピュアな関数群。
  */
 
-/** HTML 特殊文字をエスケープ */
-function esc(str) {
+/** HTML 特殊文字をエスケープ（テキスト・属性値の両方に安全） */
+export function esc(str) {
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 /**

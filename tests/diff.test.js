@@ -122,6 +122,58 @@ describe('diff: @media コンテキスト', () => {
     const result = diffCss(old, next)
     expect(result.get('@media print')?.status).toBe('added')
   })
+
+  it('ネストした @media の親条件が変わった場合は適用範囲の変更として検出する', () => {
+    const old = `
+      @media (min-width: 600px) {
+        @media (hover: hover) {
+          .btn { color: red; }
+        }
+      }
+    `
+    const next = `
+      @media (hover: hover) {
+        .btn { color: red; }
+      }
+    `
+    const result = diffCss(old, next)
+
+    const oldContext = '@media (min-width: 600px) and (hover: hover)'
+    const newContext = '@media (hover: hover)'
+
+    expect(getPropDiff(result, oldContext, '.btn', 'color')?.status).toBe('removed')
+    expect(getPropDiff(result, newContext, '.btn', 'color')?.status).toBe('added')
+    expect(result.get(newContext)?.status).toBe('added')
+  })
+})
+
+describe('diff: 条件付き at-rule コンテキスト', () => {
+  it('@supports 内から base へ移動した宣言を適用範囲の変更として検出する', () => {
+    const old = `
+      @supports (display: grid) {
+        .btn { display: grid; }
+      }
+    `
+    const next = `.btn { display: grid; }`
+    const result = diffCss(old, next)
+
+    expect(getPropDiff(result, '@supports (display: grid)', '.btn', 'display')?.status).toBe('removed')
+    expect(getPropDiff(result, 'base', '.btn', 'display')?.status).toBe('added')
+    expect(result.get('base')?.status).toBe('added')
+  })
+
+  it('@container 内から base へ移動した宣言を適用範囲の変更として検出する', () => {
+    const old = `
+      @container card (min-width: 320px) {
+        .btn { padding: 12px; }
+      }
+    `
+    const next = `.btn { padding: 12px; }`
+    const result = diffCss(old, next)
+
+    expect(getPropDiff(result, '@container card (min-width: 320px)', '.btn', 'padding')?.status).toBe('removed')
+    expect(getPropDiff(result, 'base', '.btn', 'padding')?.status).toBe('added')
+  })
 })
 
 describe('diff: 後勝ちルールが正しく適用された上での比較', () => {

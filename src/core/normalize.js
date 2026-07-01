@@ -20,7 +20,8 @@ export function normalizeSelector(sel) {
 }
 
 /**
- * @media の条件文字列を正規化する。
+ * 条件付き @ルール（@media / @supports / @container）の条件文字列を正規化する。
+ * いずれも「括弧付き条件 + 論理演算子」という同形式のため共通処理でよい。
  * - 前後の空白をトリム
  * - 連続空白を1スペースに圧縮
  * - 括弧と論理演算子（and / or / not / only）の周辺空白を正規化
