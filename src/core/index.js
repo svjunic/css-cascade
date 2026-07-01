@@ -13,7 +13,7 @@ export {
   canonicalizeValue,
   canonicalizeSelector,
 } from './normalize.js'
-export { computeSpecificity, sameSpecificity } from './specificity.js'
+export { computeSpecificity, sameSpecificity, compareSpecificity } from './specificity.js'
 export { computeOrderRisks } from './order-risk.js'
 
 /**

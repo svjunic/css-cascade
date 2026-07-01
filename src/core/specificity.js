@@ -12,6 +12,18 @@ function isHigherSpec([a1, b1, c1], [a2, b2, c2]) {
   return a1 > a2 || (a1 === a2 && b1 > b2) || (a1 === a2 && b1 === b2 && c1 > c2)
 }
 
+/**
+ * 2 つの詳細度タプルを比較する。
+ * @param {[number, number, number]} specA
+ * @param {[number, number, number]} specB
+ * @returns {number}  specA > specB なら 1、specA < specB なら -1、等しければ 0
+ */
+export function compareSpecificity(specA, specB) {
+  if (isHigherSpec(specA, specB)) return 1
+  if (isHigherSpec(specB, specA)) return -1
+  return 0
+}
+
 // トップレベル（括弧・角括弧・引用符の外側）のカンマでセレクタリストを分割する。
 // 属性セレクタ [attr="a,b"] や :is(.a, .b) の内側のカンマでは分割しない。
 // 呼び出し前に computeSpecificity がエスケープ（\x）を除去済みのため、引用符判定は単純比較でよい。

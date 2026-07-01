@@ -1,6 +1,6 @@
 import { parseCss, parseSelectorOrder } from './parse.js'
 import { resolve } from './resolve.js'
-import { sameSpecificity } from './specificity.js'
+import { sameSpecificity, computeSpecificity, compareSpecificity } from './specificity.js'
 
 /**
  * old/new のセレクタリストを比較し表示用の行を返す。
@@ -61,38 +61,76 @@ function buildOrderRows(oldList, newList) {
   return rows
 }
 
+/**
+ * 2 セレクタ間で、あるプロパティの勝者セレクタを決定する。
+ * カスケードの優先度に従い importance → 詳細度 → ソース順（後勝ち）で判定する。
+ * 一方しか宣言していない場合はそのセレクタが勝つ。
+ *
+ * @param {string} selA
+ * @param {string} selX
+ * @param {{value: string, important: boolean}|undefined} entryA  selA の当該 prop（未宣言なら undefined）
+ * @param {{value: string, important: boolean}|undefined} entryX  selX の当該 prop
+ * @param {number} specCmp  compareSpecificity(spec(selA), spec(selX))
+ * @param {number} posA  selA のソース位置
+ * @param {number} posX  selX のソース位置
+ * @returns {string|null} 勝者セレクタ名。両者とも未宣言なら null。
+ */
+function pickWinner(selA, selX, entryA, entryX, specCmp, posA, posX) {
+  if (!entryA && !entryX) return null
+  if (!entryA) return selX
+  if (!entryX) return selA
+  // 1. !important 有無
+  if (entryA.important !== entryX.important) return entryA.important ? selA : selX
+  // 2. 詳細度（高いほうが勝つ）
+  if (specCmp !== 0) return specCmp > 0 ? selA : selX
+  // 3. ソース順（後に出現したほうが勝つ）
+  return posA > posX ? selA : selX
+}
+
 function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
-  row.sameSpecificity = sameSpecificity(row.oldSelector, row.newSelector)
+  const selA = row.oldSelector
+  const selX = row.newSelector
+  row.sameSpecificity = sameSpecificity(selA, selX)
   row.conflictingProps = []
 
-  const oldPosA = oldList.indexOf(row.oldSelector)
-  const oldPosX = oldList.indexOf(row.newSelector)
-  const newPosA = newList.indexOf(row.oldSelector)
-  const newPosX = newList.indexOf(row.newSelector)
+  const oldPosA = oldList.indexOf(selA)
+  const oldPosX = oldList.indexOf(selX)
+  const newPosA = newList.indexOf(selA)
+  const newPosX = newList.indexOf(selX)
 
   if (oldPosA < 0 || oldPosX < 0 || newPosA < 0 || newPosX < 0) return
 
-  const oldWinner = oldPosA > oldPosX ? row.oldSelector : row.newSelector
-  const newWinner = newPosA > newPosX ? row.oldSelector : row.newSelector
+  // セレクタ文字列は old/new で同一なので詳細度比較は 1 度で足りる
+  const specCmp = compareSpecificity(computeSpecificity(selA), computeSpecificity(selX))
 
-  if (oldWinner === newWinner) return
+  const oldA = oldCtxProps.get(selA) || new Map()
+  const oldX = oldCtxProps.get(selX) || new Map()
+  const newA = newCtxProps.get(selA) || new Map()
+  const newX = newCtxProps.get(selX) || new Map()
 
-  const propsA = newCtxProps.get(row.oldSelector) || new Map()
-  const propsX = newCtxProps.get(row.newSelector) || new Map()
+  // 候補: 新 CSS で両セレクタが宣言し、かつ値（または !important）が異なるプロパティ
+  for (const [prop, entryNewA] of newA) {
+    const entryNewX = newX.get(prop)
+    if (!entryNewX) continue
+    if (entryNewA.value === entryNewX.value && entryNewA.important === entryNewX.important) continue
 
-  for (const [prop, entryA] of propsA) {
-    const entryX = propsX.get(prop)
-    if (!entryX) continue
-    if (entryA.value === entryX.value && entryA.important === entryX.important) continue
+    // 旧・新それぞれの並び順で勝者を判定する。
+    // 詳細度が異なる場合は順序に関わらず同じセレクタが勝つため、有効値は変わらない＝誤検出しない。
+    const oldWinner = pickWinner(selA, selX, oldA.get(prop), oldX.get(prop), specCmp, oldPosA, oldPosX)
+    const newWinner = pickWinner(selA, selX, entryNewA, entryNewX, specCmp, newPosA, newPosX)
+    if (!oldWinner || !newWinner) continue
 
-    const oldWinnerEntry = (oldCtxProps.get(oldWinner) || new Map()).get(prop)
-    const newWinnerEntry = (newCtxProps.get(newWinner) || new Map()).get(prop)
-    if (!oldWinnerEntry || !newWinnerEntry) continue
+    const oldEff = oldCtxProps.get(oldWinner)?.get(prop)
+    const newEff = newCtxProps.get(newWinner)?.get(prop)
+    if (!oldEff || !newEff) continue
+
+    // 有効値が実際に変化する場合のみ競合として報告する
+    if (oldEff.value === newEff.value && oldEff.important === newEff.important) continue
 
     row.conflictingProps.push({
       prop,
-      oldEffective: { value: oldWinnerEntry.value, important: oldWinnerEntry.important },
-      newEffective: { value: newWinnerEntry.value, important: newWinnerEntry.important },
+      oldEffective: { value: oldEff.value, important: oldEff.important },
+      newEffective: { value: newEff.value, important: newEff.important },
     })
   }
 }

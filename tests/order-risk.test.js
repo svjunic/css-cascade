@@ -272,6 +272,38 @@ describe('computeOrderRisks — 詳細度が異なるスワップ', () => {
   })
 })
 
+describe('computeOrderRisks — 詳細度が異なるスワップは競合を誤検出しない', () => {
+  // .a（低詳細度）と #x（高詳細度）を並べ替えても、常に #x が勝つため有効値は変わらない。
+  const old = `
+    .a { color: red; }
+    #x { color: blue; }
+  `
+  const newCss = `
+    #x { color: blue; }
+    .a { color: red; }
+  `
+
+  it('moved 行はあるが conflictingProps は空（ID セレクタが順序に関係なく勝つ）', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    expect(base).toBeDefined()
+    const moved = base.rows.filter(r => r.type === 'moved')
+    expect(moved.length).toBeGreaterThan(0)
+    moved.forEach(row => expect(row.conflictingProps).toHaveLength(0))
+  })
+
+  it('同一詳細度で値が異なるスワップは従来どおり競合を検出する', () => {
+    const oldEq = `.a { color: red; } .b { color: blue; }`
+    const newEq = `.b { color: blue; } .a { color: red; }`
+    const risks = computeOrderRisks(oldEq, newEq)
+    const base = risks.find(r => r.contextKey === 'base')
+    const moved = base.rows.filter(r => r.type === 'moved')
+    expect(moved.length).toBeGreaterThan(0)
+    // 同一詳細度で値が異なるスワップでは、両方向の moved 行が競合を検出する
+    expect(moved.every(row => row.conflictingProps.length > 0)).toBe(true)
+  })
+})
+
 describe('computeOrderRisks — @media 内のスワップ', () => {
   const old = `
     @media (max-width: 768px) {

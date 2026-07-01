@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { resolve } from 'node:path'
-import { describe, it, expect } from 'vitest'
+import { resolve, join } from 'node:path'
+import { writeFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { describe, it, expect, afterAll } from 'vitest'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const CLI = resolve(__dirname, '../bin/css-cascade.cjs')
@@ -107,5 +109,34 @@ describe('css-cascade CLI', () => {
     const { stdout } = run([OLD, NEW, '--format', 'json'])
     const parsed = JSON.parse(stdout)
     expect('orderRisks' in parsed).toBe(false)
+  })
+})
+
+describe('css-cascade CLI — CSS パースエラー', () => {
+  const tmpDirs = []
+  afterAll(() => {
+    for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true })
+  })
+
+  function writeTemp(content) {
+    const dir = mkdtempSync(join(tmpdir(), 'css-cascade-'))
+    tmpDirs.push(dir)
+    const file = join(dir, 'input.css')
+    writeFileSync(file, content)
+    return file
+  }
+
+  it('旧ファイルが不正な CSS のとき exit 2 と Parse error を返す', () => {
+    // 閉じ括弧なし → PostCSS が CssSyntaxError を投げる
+    const bad = writeTemp('.a { color: red;')
+    const { code, stderr } = run([bad, NEW])
+    expect(code).toBe(2)
+    expect(stderr).toContain('Parse error')
+  })
+
+  it('新ファイルが不正な CSS のとき exit 2 を返す（差分/空 summary で成功扱いにしない）', () => {
+    const bad = writeTemp('.a { color: red }}}')
+    const { code } = run([OLD, bad])
+    expect(code).toBe(2)
   })
 })

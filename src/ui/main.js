@@ -19,6 +19,7 @@ const state = {
   oldFileName: null,
   newFileName: null,
   diffResult: null,
+  parseError: null,  // CSS パースエラー時のメッセージ（null=正常）
   allItems: [],      // [{contextKey, selector}]
   fzfInstance: null,
   query: '',
@@ -54,12 +55,26 @@ function runDiff() {
   if (!state.oldCss || !state.newCss) return
 
   const parseOpts = { semanticSelectors: state.semanticSelectors }
-  const parsedOld = parseCss(state.oldCss, parseOpts)
-  const parsedNew = parseCss(state.newCss, parseOpts)
-  const resolvedOld = resolve(parsedOld)
-  const resolvedNew = resolve(parsedNew)
-  state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
-  state.orderRisks = computeOrderRisks(state.oldCss, state.newCss, parseOpts)
+  try {
+    const parsedOld = parseCss(state.oldCss, parseOpts)
+    const parsedNew = parseCss(state.newCss, parseOpts)
+    const resolvedOld = resolve(parsedOld)
+    const resolvedNew = resolve(parsedNew)
+    state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
+    state.orderRisks = computeOrderRisks(state.oldCss, state.newCss, parseOpts)
+    state.parseError = null
+  } catch (err) {
+    // CSS パースエラー: 例外を握りつぶさずユーザーに表示する
+    state.parseError = err.message
+    state.diffResult = null
+    state.orderRisks = []
+    state.allItems = []
+    state.fzfInstance = null
+    updateContextTabs()
+    updateSummary()
+    renderResults()
+    return
+  }
   state.expandedOrderRiskContexts = new Set(
     state.orderRisks.filter(r => r.hasWarning).map(r => r.contextKey)
   )
@@ -124,6 +139,13 @@ function getFilteredItems() {
 // ─── 描画 ─────────────────────────────────────────────────────────────────
 
 function renderResults() {
+  if (state.parseError) {
+    resultsEl.innerHTML = `<div class="empty-state">
+      <p>CSS の解析に失敗しました。</p>
+      <p class="empty-sub">${escapeHtml(state.parseError)}</p>
+    </div>`
+    return
+  }
   if (!state.diffResult) {
     resultsEl.innerHTML = `<div class="empty-state">
       <p>旧・新の CSS ファイルをドロップしてください。</p>
@@ -204,6 +226,10 @@ function renderResults() {
 }
 
 function updateSummary() {
+  if (state.parseError) {
+    summaryEl.textContent = 'パースエラー'
+    return
+  }
   if (!state.diffResult) {
     summaryEl.textContent = ''
     return
