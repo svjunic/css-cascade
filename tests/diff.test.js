@@ -334,3 +334,51 @@ describe('diff: semanticSelectors — 属性セレクタのクォート等価', 
     expect(anyChanged).toBe(false)
   })
 })
+
+describe('diff: スコープ — セレクタ単位の比較（異なるセレクタの DOM オーバーラップは解決しない）', () => {
+  // ツールの比較単位は「セレクタごとの最終適用値」であり、
+  // 異なるセレクタが同一 DOM 要素に当たった場合のオーバーラップ解決は行わない。
+  // .btn に .btn.primary を追加した場合、.btn.primary の適用要素での実効値は変化するが、
+  // ツールはこれを「.btn.primary セレクタの追加」として報告する（スコープどおりの挙動）。
+  it('.btn に .btn.primary を追加した変更は .btn.primary セレクタの追加として報告される', () => {
+    const old = `.btn { color: red; }`
+    const next = `.btn { color: red; } .btn.primary { color: blue; }`
+    const result = diffCss(old, next)
+
+    // .btn は変更なし（同一セレクタとして比較される）
+    expect(getSelectorDiff(result, 'base', '.btn')?.status).toBe('unchanged')
+
+    // .btn.primary は新規追加セレクタとして報告される
+    const btnPrimary = getSelectorDiff(result, 'base', '.btn.primary')
+    expect(btnPrimary?.status).toBe('added')
+    expect(getPropDiff(result, 'base', '.btn.primary', 'color')?.newValue).toBe('blue')
+  })
+
+  it('DOM 上 .btn.primary 要素の実効値変化は「セレクタ追加」としてのみ表現される', () => {
+    // .btn.primary 要素は old では .btn が color:red を適用、new では .btn.primary(詳細度高)が color:blue を上書きする。
+    // ツールは「.btn セレクタの値変更」ではなく「.btn.primary の追加」として報告し、
+    // DOM 上の最終適用値変化を直接表現しない（これはスコープ外の挙動であり、仕様どおり）。
+    const old = `.btn { color: red; }`
+    const next = `.btn { color: red; } .btn.primary { color: blue; }`
+    const result = diffCss(old, next)
+
+    // .btn の color は unchanged のまま（DOM オーバーラップを解決しない）
+    expect(getPropDiff(result, 'base', '.btn', 'color')?.status).toBe('unchanged')
+  })
+})
+
+describe('diff: @supports の url() 正規化', () => {
+  it('url() 内のコロン（https://）はコロン正規化で破壊されない', () => {
+    const css = `@supports (background: url(https://example.com)) { .a { color: red; } }`
+    const result = diffCss(css, css)
+    const ctxKey = '@supports (background: url(https://example.com))'
+    expect(result.get(ctxKey)?.status).toBe('unchanged')
+  })
+
+  it('url() 内に括弧を含む quoted URL はコロン正規化で破壊されない', () => {
+    const css = `@supports (background: url("(test)")) { .a { color: red; } }`
+    const result = diffCss(css, css)
+    const ctxKey = '@supports (background: url("(test)"))'
+    expect(result.get(ctxKey)?.status).toBe('unchanged')
+  })
+})

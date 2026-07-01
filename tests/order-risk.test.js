@@ -393,3 +393,58 @@ describe('computeOrderRisks — 既存サンプルデータ (.mogeta2-*)', () =>
     movedPairs.forEach(row => expect(row.conflictingProps).toHaveLength(0))
   })
 })
+
+describe('computeOrderRisks — 相対順不変ペアの偽陽性抑制（A,B,C,D → B,C,A,D）', () => {
+  // .a が後方へ移動。.b/.c の相対順は変わらない。
+  // index ペアリングは (.a,.b)(.b,.c)(.c,.a) となるが、(.b,.c) は old/new ともに b<c で反転なし。
+  // 相対順反転ガードにより (.b,.c) の conflictingProps は空になるべきである。
+  const old = `
+    .a { color: red; }
+    .b { color: blue; }
+    .c { color: green; font-weight: bold; }
+    .d { color: red; }
+  `
+  const newCss = `
+    .b { color: blue; }
+    .c { color: green; font-weight: bold; }
+    .a { color: red; }
+    .d { color: red; }
+  `
+
+  it('moved 行が検知される（.a の移動）', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    expect(base).toBeDefined()
+    expect(base.hasWarning).toBe(true)
+    expect(base.rows.filter(r => r.type === 'moved')).toHaveLength(3)
+  })
+
+  it('相対順が不変の (.b,.c) ペアは conflictingProps が空', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    const bcPairs = base.rows
+      .filter(r => r.type === 'moved')
+      .filter(r =>
+        (r.oldSelector === '.b' && r.newSelector === '.c') ||
+        (r.oldSelector === '.c' && r.newSelector === '.b'),
+      )
+    // (.b,.c) ペアは old/new ともに b が c より前 → 反転なし → conflictingProps は空
+    bcPairs.forEach(row => expect(row.conflictingProps).toHaveLength(0))
+  })
+
+  it('.a 絡みの反転ペア (.a,.b) は値が異なるため競合を検出する（ガードを正しくすり抜ける）', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    // (.a,.b) は old/new で相対順が逆転した反転ペア。
+    // .a=color:red / .b=color:blue で値が異なるため、順序依存の競合として報告される。
+    const abPair = base.rows
+      .filter(r => r.type === 'moved')
+      .find(r =>
+        (r.oldSelector === '.a' && r.newSelector === '.b') ||
+        (r.oldSelector === '.b' && r.newSelector === '.a'),
+      )
+    expect(abPair).toBeDefined()
+    expect(abPair.conflictingProps.length).toBeGreaterThan(0)
+    expect(abPair.conflictingProps.map(p => p.prop)).toContain('color')
+  })
+})

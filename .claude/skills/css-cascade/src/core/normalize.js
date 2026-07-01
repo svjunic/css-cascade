@@ -29,10 +29,19 @@ export function normalizeSelector(sel) {
  *       → "(min-width: 521px) and (max-width: 960px)"
  */
 export function normalizeMediaCondition(condition) {
-  return condition
+  // url() 内のコンテンツ（プロトコルコロン等）をコロン正規化の対象外にするため一時退避する
+  const urlSlots = []
+  // url() 内は quoted string を含む完全な CSS トークン規則で抽出する。
+  // 単純な [^)]* では url("it's (fine)") のように quoted string 内に ')' と
+  // 別種クォートが混在する場合に誤マッチするため、quoted branch を個別に処理している。
+  const withoutUrls = condition.replace(/url\((?:[^)"'\\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')*\)/gi, m => {
+    urlSlots.push(m)
+    return '\x00' + (urlSlots.length - 1) + '\x00'
+  })
+  const normalized = withoutUrls
     .trim()
-    // コロン後のスペースを正規化: "max-width:960px" → "max-width: 960px"
-    .replace(/:\s*/g, ': ')
+    // コロン前後のスペースを正規化: "max-width:960px" / "max-width :960px" → "max-width: 960px"
+    .replace(/\s*:\s*/g, ': ')
     // 連続空白を1つに圧縮
     .replace(/\s+/g, ' ')
     // 括弧と論理演算子の間のスペースを統一（前後に1つ）
@@ -40,6 +49,8 @@ export function normalizeMediaCondition(condition) {
     // 末尾クリーンアップ
     .trim()
     .replace(/\s+/g, ' ')
+  // url() を元に戻す
+  return normalized.replace(/\x00(\d+)\x00/g, (_, i) => urlSlots[+i])
 }
 
 /**

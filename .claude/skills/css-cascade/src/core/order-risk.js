@@ -19,6 +19,9 @@ function buildOrderRows(oldList, newList) {
   const newCommon = newList.filter(s => oldSet.has(s))
 
   // 位置ベースのペアリング: oldCommon[i] → newCommon[i]
+  // インデックス一致でペアリングするため、巡回移動では意味的に無関係なペアが生成される場合がある。
+  // annotateMovedRow の相対順反転ガードがこれらの偽ペアを除外する。
+  // 根治は LCS ベースのペアリングに再設計する別タスクとして追跡中。
   const pairing = new Map()
   for (let i = 0; i < oldCommon.length; i++) {
     pairing.set(oldCommon[i], newCommon[i])
@@ -99,6 +102,12 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   const newPosX = newList.indexOf(selX)
 
   if (oldPosA < 0 || oldPosX < 0 || newPosA < 0 || newPosX < 0) return
+
+  // 相対順が変わっていないペアは順序起因の競合を生まないためスキップ。
+  // ペアリングのインデックス一致由来の偽ペア（巡回移動で実際には反転していない組合せ）を除外する。
+  const oldAbeforeX = oldPosA < oldPosX
+  const newAbeforeX = newPosA < newPosX
+  if (oldAbeforeX === newAbeforeX) return
 
   // セレクタ文字列は old/new で同一なので詳細度比較は 1 度で足りる
   const specCmp = compareSpecificity(computeSpecificity(selA), computeSpecificity(selX))

@@ -8,7 +8,9 @@ allowed-tools:
 
 # CSS カスケードリスク確認スキル（スクリプト版）
 
-プロジェクト内の `bin/css-cascade.src.js` を使い、CSSカスケードルールを踏まえた意味的差分で変更を検証するスキル。テキスト差分ではなく「最終的に有効なプロパティ値」レベルで比較するため、後勝ちルール・`!important`・`@layer`（カスケードレイヤー順）の影響も正確に把握できる。
+プロジェクト内の `bin/css-cascade.src.js` を使い、CSSカスケードルールを踏まえた意味的差分で変更を検証するスキル。テキスト差分ではなく**セレクタ単位**で比較し、そのセレクタが最終適用する値（同一セレクタ内の後勝ちルール・`!important`・`@layer` カスケードレイヤー順を考慮）の変化を検出できる。加えて、**同一詳細度セレクタの順序入れ替えによる限定的なカスケード競合リスク**も検出する。
+
+> **スコープの注意**: 比較単位はセレクタごとの最終適用値です。異なるセレクタが同一DOM要素に適用された場合のオーバーラップ（セレクタ間の詳細度競合・DOM構造を跨いだ実効値）は解決しません。例: `.btn { color: red }` に `.btn.primary { color: blue }` を追加した変更は「`.btn.primary` セレクタの追加」として報告されます（`.btn.primary` 要素での実効値変化は直接表現されません）。
 
 ## 前提条件
 
@@ -54,16 +56,17 @@ git diff --name-only HEAD -- '*.css'
 mkdir -p css-cascade-report
 WORK_DIR=$(mktemp -d)
 
-for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
-  SLUG=$(echo "$filepath" | tr '/' '-')
+while IFS= read -r -d '' filepath; do
+  KEY=$(printf '%s' "$filepath" | cksum | cut -d' ' -f1)
+  SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')-${KEY}"
   OLD="$WORK_DIR/old-${SLUG}.css"
-  git show HEAD:${filepath} > "$OLD" 2>/dev/null || > "$OLD"
-  OUTPUT_HTML="css-cascade-report/$(echo "$filepath" | sed 's|/|--|g').html"
-  node <SKILL_DIR>/bin/css-cascade.src.js \
-    "$OLD" ${filepath} \
+  git show "HEAD:$filepath" > "$OLD" 2>/dev/null || : > "$OLD"
+  OUTPUT_HTML="css-cascade-report/${SLUG}.html"
+  node "<SKILL_DIR>/bin/css-cascade.src.js" \
+    "$OLD" "$filepath" \
     --format html --order-risk > "$OUTPUT_HTML" 2>&1 || true
   echo "HTMLレポート: file://$(pwd)/$OUTPUT_HTML"
-done
+done < <(git diff --name-only -z HEAD -- '*.css' | sort -z)
 
 rm -rf "$WORK_DIR"
 ```
@@ -75,28 +78,30 @@ rm -rf "$WORK_DIR"
 ```bash
 WORK_DIR=$(mktemp -d)
 
-for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
+while IFS= read -r -d '' filepath; do
   (
-    SLUG=$(echo "$filepath" | tr '/' '-')
+    KEY=$(printf '%s' "$filepath" | cksum | cut -d' ' -f1)
+    SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')-${KEY}"
     OLD="$WORK_DIR/old-${SLUG}.css"
     OUT="$WORK_DIR/out-${SLUG}.txt"
-    git show HEAD:${filepath} > "$OLD" 2>/dev/null || > "$OLD"
+    git show "HEAD:$filepath" > "$OLD" 2>/dev/null || : > "$OLD"
     echo "=== $filepath ===" > "$OUT"
-    node <SKILL_DIR>/bin/css-cascade.src.js "$OLD" "${filepath}" \
+    node "<SKILL_DIR>/bin/css-cascade.src.js" "$OLD" "$filepath" \
       --format json --order-risk --filter all >> "$OUT" 2>&1
     echo $? > "$WORK_DIR/exit-${SLUG}.code"
   ) &
-done
+done < <(git diff --name-only -z HEAD -- '*.css' | sort -z)
 
 wait
 
 OVERALL_EXIT=0
-for filepath in $(git diff --name-only HEAD -- '*.css' | sort); do
-  SLUG=$(echo "$filepath" | tr '/' '-')
+while IFS= read -r -d '' filepath; do
+  KEY=$(printf '%s' "$filepath" | cksum | cut -d' ' -f1)
+  SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')-${KEY}"
   cat "$WORK_DIR/out-${SLUG}.txt"
   FILE_EXIT=$(cat "$WORK_DIR/exit-${SLUG}.code" 2>/dev/null || echo 0)
   [ "$FILE_EXIT" -gt "$OVERALL_EXIT" ] && OVERALL_EXIT=$FILE_EXIT
-done
+done < <(git diff --name-only -z HEAD -- '*.css' | sort -z)
 
 rm -rf "$WORK_DIR"
 exit $OVERALL_EXIT
@@ -199,9 +204,9 @@ HTMLレポートで詳細を確認してください:
 
 **エージェントとしての判断：**
 
-このスキルの目的は「CSSの変更が意図しないカスケードの副作用（セレクタの上書きや順序変更による影響）を引き起こしていないか」を確認することである。
+このスキルの目的は「**同一セレクタ内**でのプロパティ値変化、および**同一詳細度セレクタの順序入れ替えによる限定的なカスケード競合リスク**を検出すること」である。異なるセレクタが同一DOM要素に当たる場合のオーバーラップ解決はスコープ外であるため、その点を過大報告しないよう注意すること。
 
-- プロパティ変更あり → 変更内容が「意図した変更の直接的な結果」か「副作用」かを区別して報告。HTMLレポートも案内する
+- プロパティ変更あり → 変更内容が「意図した変更の直接的な結果」か「同一セレクタ内での副作用」かを区別して報告。HTMLレポートも案内する
 - プロパティ変更ゼロ・順序変更あり → `⚠️ **順序変更が検出されました**` と警告し、HTMLレポートへ誘導する
 - 差分なし（exit code 0）かつ順序変更なし → 問題なしと報告
 

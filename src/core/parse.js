@@ -60,13 +60,12 @@ const CONDITIONAL_AT_RULES = new Set(['media', 'supports', 'container'])
  * @returns {Map<string, string[]>}
  */
 function appendCondition(conds, name, condition) {
+  if (!condition) return conds
   const next = new Map()
   for (const [k, v] of conds) next.set(k, v.slice())
-  if (condition) {
-    const list = next.get(name)
-    if (list) list.push(condition)
-    else next.set(name, [condition])
-  }
+  const list = next.get(name)
+  if (list) list.push(condition)
+  else next.set(name, [condition])
   return next
 }
 
@@ -148,8 +147,7 @@ export function parseSelectorOrder(cssText, options = {}) {
 
   const normSel = options.semanticSelectors ? canonicalizeSelector : normalizeSelector
 
-  function processRule(rule, conds) {
-    const contextKey = contextKeyFromConditions(conds)
+  function processRule(rule, contextKey) {
     for (const sel of rule.selectors.map(s => normSel(s))) {
       addSel(contextKey, sel)
     }
@@ -161,8 +159,9 @@ export function parseSelectorOrder(cssText, options = {}) {
       // @media / @supports / @container: 条件ごとに独立コンテキスト。
       // ネスト条件を蓄積する。コンテキストは addSel 側で遅延生成する。
       const childConds = appendCondition(conds, name, normalizeMediaCondition(atRule.params))
+      const childKey = contextKeyFromConditions(childConds)
       atRule.each(node => {
-        if (node.type === 'rule') processRule(node, childConds)
+        if (node.type === 'rule') processRule(node, childKey)
         else if (node.type === 'atrule') processAtRule(node, childConds)
       })
     } else if (name === 'font-face' || name === 'keyframes' || name === '-webkit-keyframes' || name === 'charset' || name === 'import' || name === 'namespace') {
@@ -170,8 +169,9 @@ export function parseSelectorOrder(cssText, options = {}) {
     } else {
       // @layer などその他の @ルール: 子ルールを親コンテキストに平坦化する（順序を保持）
       if (atRule.nodes) {
+        const ctxKey = contextKeyFromConditions(conds)
         atRule.each(node => {
-          if (node.type === 'rule') processRule(node, conds)
+          if (node.type === 'rule') processRule(node, ctxKey)
           else if (node.type === 'atrule') processAtRule(node, conds)
         })
       }
@@ -184,7 +184,7 @@ export function parseSelectorOrder(cssText, options = {}) {
   // 各コンテキストは addSel 側で遅延生成する（空コンテキストは作らない）。
   const baseConds = new Map()
   root.each(node => {
-    if (node.type === 'rule') processRule(node, baseConds)
+    if (node.type === 'rule') processRule(node, 'base')
     else if (node.type === 'atrule') processAtRule(node, baseConds)
   })
 
@@ -246,8 +246,7 @@ export function parseCss(cssText, options = {}) {
   const normSel = options.semanticSelectors ? canonicalizeSelector : normalizeSelector
 
   /** 通常の Rule ノードを処理する */
-  function processRule(rule, conds, layer) {
-    const contextKey = contextKeyFromConditions(conds)
+  function processRule(rule, contextKey, layer) {
     // グループセレクタを個別セレクタに分解
     const selectors = rule.selectors.map(s => normSel(s))
     for (const sel of selectors) {
@@ -267,9 +266,10 @@ export function parseCss(cssText, options = {}) {
       // @media / @supports / @container: 条件ごとに独立コンテキスト（レイヤーはそのまま引き継ぐ）。
       // ネスト条件を蓄積する。コンテキストは addDecl 側で遅延生成する。
       const childConds = appendCondition(conds, name, normalizeMediaCondition(atRule.params))
+      const childKey = contextKeyFromConditions(childConds)
       atRule.each(node => {
         if (node.type === 'rule') {
-          processRule(node, childConds, layer)
+          processRule(node, childKey, layer)
         } else if (node.type === 'atrule') {
           // ネストした @media / @supports / @container や @layer 等
           processAtRule(node, childConds, layer)
@@ -285,9 +285,10 @@ export function parseCss(cssText, options = {}) {
           ? qualifyLayer(layer, params)
           : qualifyLayer(layer, `__anon${anonCounter++}`)
         registerLayer(layerName)
+        const ctxKeyForLayer = contextKeyFromConditions(conds)
         atRule.each(node => {
           if (node.type === 'rule') {
-            processRule(node, conds, layerName)
+            processRule(node, ctxKeyForLayer, layerName)
           } else if (node.type === 'atrule') {
             processAtRule(node, conds, layerName)
           }
@@ -302,7 +303,7 @@ export function parseCss(cssText, options = {}) {
     } else if (name === 'font-face') {
       // @font-face: (family/weight/style) を擬似セレクタとして使う
       const contextKey = '@font-face'
-      ensureContext(contextKey)
+      // ensureContext は addDecl 内で呼ばれるため明示的な呼び出しは不要
 
       // font-face key を決めるために宣言を2回読む（1回目はキー収集用）
       const decls = []
@@ -317,7 +318,7 @@ export function parseCss(cssText, options = {}) {
     } else if (name === 'keyframes' || name === '-webkit-keyframes') {
       // @keyframes: アニメーション名ごとにコンテキスト、ストップを擬似セレクタに
       const contextKey = normalizeKeyframesName(name, atRule.params)
-      ensureContext(contextKey)
+      // ensureContext は addDecl 内で呼ばれるため明示的な呼び出しは不要
       atRule.each(node => {
         if (node.type === 'rule') {
           // キーフレームのストップ (0%, 100%, from, to など) を selector として扱う
@@ -334,9 +335,10 @@ export function parseCss(cssText, options = {}) {
     } else {
       // その他の @ルール（@scope 等）: 子ルールがあれば親コンテキストに平坦化する
       if (atRule.nodes) {
+        const ctxKey = contextKeyFromConditions(conds)
         atRule.each(node => {
           if (node.type === 'rule') {
-            processRule(node, conds, layer)
+            processRule(node, ctxKey, layer)
           } else if (node.type === 'atrule') {
             processAtRule(node, conds, layer)
           }
@@ -352,7 +354,7 @@ export function parseCss(cssText, options = {}) {
   const baseConds = new Map()
   root.each(node => {
     if (node.type === 'rule') {
-      processRule(node, baseConds, null)
+      processRule(node, 'base', null)
     } else if (node.type === 'atrule') {
       processAtRule(node, baseConds, null)
     }
