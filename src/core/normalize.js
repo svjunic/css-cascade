@@ -44,6 +44,8 @@ export function normalizeMediaCondition(condition) {
     .replace(/\s*:\s*/g, ': ')
     // 連続空白を1つに圧縮
     .replace(/\s+/g, ' ')
+    // prefix 型の論理演算子と条件の間を統一: "not(print)" → "not (print)"
+    .replace(/\b(not|only)\s*\(/gi, '$1 (')
     // 括弧と論理演算子の間のスペースを統一（前後に1つ）
     .replace(/\)\s*(and|or|not|only)\s*\(/gi, ') $1 (')
     // 末尾クリーンアップ
@@ -123,7 +125,7 @@ export function canonicalizeSelector(sel) {
   let s = normalizeSelector(sel)
   // 属性セレクタ内を正規化
   s = s.replace(/\[([^\]]*)\]/g, (_, inner) => {
-    let t = inner.replace(/\s*([~|^$*]?=)\s*/g, '$1') // = 系演算子の前後空白除去
+    let t = inner.replace(/\s*([~|^$*]?)\s*=\s*/g, '$1=') // = 系演算子の前後空白除去
     t = t.replace(/(['"])(.*?)\1/g, '$2')             // クォート除去
     return '[' + t.trim() + ']'
   })
