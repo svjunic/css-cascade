@@ -76,6 +76,45 @@ export function normalizeMediaCondition(condition) {
   }
   s = out
 
+  // @supports (property: value) フィーチャクエリの値部分を保護する。
+  // not() / only() 等の関数トークンがカスタムプロパティ値として現れる場合
+  // （例: @supports (--x: not(a))）に論理演算子と誤認されないようスロット退避する。
+  // valuePart には既存の \x00N\x00 マーカーが含まれる場合があり（url() 等が先にスロット済み）、
+  // その場合スロット内にスロット参照が入る二重スロットが生じる。復元は多重パスで対応する。
+  {
+    let pfxOut = '', pfxI = 0
+    while (pfxI < s.length) {
+      if (s[pfxI] === '(') {
+        const propMatch = s.slice(pfxI + 1).match(/^\s*[\w-]+\s*:/)
+        if (propMatch) {
+          const colonEnd = pfxI + 1 + propMatch[0].length
+          let depth = 1, j = colonEnd, quote = null
+          while (j < s.length && depth > 0) {
+            const ch = s[j]
+            if (quote) { if (ch === quote) quote = null }
+            else if (ch === '"' || ch === "'") { quote = ch }
+            else if (ch === '(') { depth++ }
+            else if (ch === ')') { depth-- }
+            j++
+          }
+          const valuePart = s.slice(colonEnd, j - 1).trimStart()
+          if (/\b(?:not|only)\s*\(/i.test(valuePart)) {
+            slots.push(valuePart)
+            pfxOut += s.slice(pfxI, colonEnd) + '\x00' + (slots.length - 1) + '\x00'
+            pfxI = j - 1
+          } else {
+            pfxOut += s[pfxI++]
+          }
+        } else {
+          pfxOut += s[pfxI++]
+        }
+      } else {
+        pfxOut += s[pfxI++]
+      }
+    }
+    s = pfxOut
+  }
+
   const normalized = s
     .trim()
     // コロン前後のスペースを正規化: "max-width:960px" / "max-width :960px" → "max-width: 960px"
@@ -89,8 +128,13 @@ export function normalizeMediaCondition(condition) {
     // 末尾クリーンアップ
     .trim()
     .replace(/\s+/g, ' ')
-  // url() / selector() を元に戻す
-  return normalized.replace(/\x00(\d+)\x00/g, (_, i) => slots[+i])
+  // スロットを元に戻す。二重スロット（スロット内にスロット参照）が生じた場合に備え
+  // NUL マーカーがなくなるまで多重パスで展開する。
+  let result = normalized
+  while (/\x00\d+\x00/.test(result)) {
+    result = result.replace(/\x00(\d+)\x00/g, (_, i) => slots[+i])
+  }
+  return result
 }
 
 /**

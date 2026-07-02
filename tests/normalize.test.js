@@ -180,6 +180,25 @@ describe('normalizeMediaCondition: @supports selector() 引数保護 [バグ]', 
     // 現状: 'selector(input: checked)' になる
     expect(normalizeMediaCondition('selector(input:checked)')).toBe('selector(input:checked)')
   })
+
+  it('@supports カスタムプロパティ値内の not() は変換しない', () => {
+    // Bug-8 (CONFIRMED): \b(not|only)\s*\( が (--x: not(a)) の値部分の not( にマッチし
+    // (--x: not (a)) に変換してしまう
+    expect(normalizeMediaCondition('(--x: not(a))')).toBe('(--x: not(a))')
+  })
+
+  it('@supports カスタムプロパティ値に url() と not() が共存する場合 NUL バイトが残らない', () => {
+    // Bug-9 (CONFIRMED): url() スロット済みマーカーを含む valuePart が二重スロットされ
+    // 単一パス復元では内部の \x00N\x00 が展開されず NUL バイトが混入する
+    const result = normalizeMediaCondition('(--x: url(a.png) not(b))')
+    expect(result).toBe('(--x: url(a.png) not(b))')
+    expect(result).not.toContain('\x00')
+  })
+
+  it('( の直後に空白があるフィーチャクエリでも not() を保護する', () => {
+    // Bug-10: propMatch が先頭空白を考慮しないためスロット保護が効かない
+    expect(normalizeMediaCondition('( --x: not(a) )')).toBe('( --x: not(a) )')
+  })
 })
 
 describe('canonicalizeValue: calc マイナス空白の一貫性 [バグ]', () => {
