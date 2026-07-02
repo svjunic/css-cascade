@@ -155,6 +155,103 @@ describe('resolve: 条件付き at-rule コンテキストの分離', () => {
   })
 })
 
+describe('resolve: @font-face と @keyframes', () => {
+  it('@font-face は family/weight/style の複合キーで別 font を区別する', () => {
+    const css = `
+      @font-face {
+        font-family: "Inter";
+        font-weight: 400;
+        src: url(inter-regular.woff2);
+      }
+      @font-face {
+        font-family: "Inter";
+        font-weight: 700;
+        src: url(inter-bold.woff2);
+      }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, '@font-face', 'Inter/400/normal').get('src')?.value).toBe('url(inter-regular.woff2)')
+    expect(getProps(resolved, '@font-face', 'Inter/700/normal').get('src')?.value).toBe('url(inter-bold.woff2)')
+  })
+
+  it('@font-face の同一 family/weight/style は後勝ちで解決される', () => {
+    const css = `
+      @font-face {
+        font-family: "Inter";
+        font-weight: 400;
+        src: url(old.woff2);
+      }
+      @font-face {
+        font-family: "Inter";
+        font-weight: 400;
+        src: url(new.woff2);
+      }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, '@font-face', 'Inter/400/normal').get('src')?.value).toBe('url(new.woff2)')
+  })
+
+  it('@keyframes は animation name ごとのコンテキストで stop を疑似セレクタとして扱う', () => {
+    const css = `
+      @keyframes fade {
+        from { opacity: 0; }
+        50%, 75% { opacity: .5; }
+        to { opacity: 1; }
+      }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, '@keyframes fade', 'from').get('opacity')?.value).toBe('0')
+    expect(getProps(resolved, '@keyframes fade', '50%, 75%').get('opacity')?.value).toBe('.5')
+    expect(getProps(resolved, '@keyframes fade', 'to').get('opacity')?.value).toBe('1')
+  })
+
+  it('@-webkit-keyframes は @keyframes と同一コンテキストへ正規化される', () => {
+    const css = `
+      @-webkit-keyframes spin { to { transform: rotate(180deg); } }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, '@keyframes spin', 'to').get('transform')?.value).toBe('rotate(360deg)')
+    expect(resolved.has('@-webkit-keyframes spin')).toBe(false)
+  })
+})
+
+describe('resolve: @layer と条件付き at-rule の組み合わせ', () => {
+  it('@media 内でもレイヤー順は同一コンテキスト内の勝者判定にだけ効く', () => {
+    const css = `
+      @layer base, theme;
+      @media (min-width: 600px) {
+        @layer theme { .a { color: blue; } }
+        @layer base { .a { color: red; } }
+      }
+      .a { color: green; }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, 'base', '.a').get('color')?.value).toBe('green')
+    expect(getProps(resolved, '@media (min-width: 600px)', '.a').get('color')?.value).toBe('blue')
+  })
+
+  it('@supports 内の !important layer 順反転は base へ漏れない', () => {
+    const css = `
+      @layer reset, components;
+      .a { color: green; }
+      @supports (display: grid) {
+        @layer reset { .a { color: red !important; } }
+        @layer components { .a { color: blue !important; } }
+      }
+    `
+    const resolved = resolve(parseCss(css))
+
+    expect(getProps(resolved, 'base', '.a').get('color')).toEqual({ value: 'green', important: false })
+    expect(getProps(resolved, '@supports (display: grid)', '.a').get('color')).toEqual({ value: 'red', important: true })
+  })
+})
+
 describe('resolve: セレクタ正規化', () => {
   it('余分な空白があるセレクタは正規化後に同一として集約される', () => {
     const css = `.a  .b { color: red; } .a .b { color: blue; }`

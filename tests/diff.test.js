@@ -176,6 +176,51 @@ describe('diff: 条件付き at-rule コンテキスト', () => {
   })
 })
 
+describe('diff: @font-face と @keyframes', () => {
+  it('@font-face の src 変更は font face キー配下の changed として検出する', () => {
+    const old = `
+      @font-face {
+        font-family: "Inter";
+        font-weight: 400;
+        src: url(old.woff2);
+      }
+    `
+    const next = `
+      @font-face {
+        font-family: "Inter";
+        font-weight: 400;
+        src: url(new.woff2);
+      }
+    `
+    const result = diffCss(old, next)
+    const prop = getPropDiff(result, '@font-face', 'Inter/400/normal', 'src')
+
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('url(old.woff2)')
+    expect(prop?.newValue).toBe('url(new.woff2)')
+  })
+
+  it('@keyframes の stop 内プロパティ変更は animation context 内で検出する', () => {
+    const old = `@keyframes fade { from { opacity: 0; } to { opacity: 1; } }`
+    const next = `@keyframes fade { from { opacity: 0; } to { opacity: .8; } }`
+    const result = diffCss(old, next)
+    const prop = getPropDiff(result, '@keyframes fade', 'to', 'opacity')
+
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('1')
+    expect(prop?.newValue).toBe('.8')
+  })
+
+  it('@-webkit-keyframes と @keyframes の vendor 差だけでは context 追加削除にならない', () => {
+    const old = `@-webkit-keyframes spin { to { transform: rotate(360deg); } }`
+    const next = `@keyframes spin { to { transform: rotate(360deg); } }`
+    const result = diffCss(old, next)
+
+    expect(result.get('@keyframes spin')?.status).toBe('unchanged')
+    expect(result.has('@-webkit-keyframes spin')).toBe(false)
+  })
+})
+
 describe('diff: 後勝ちルールが正しく適用された上での比較', () => {
   it('重複定義があっても最終値で比較される', () => {
     // old: 後勝ちで color: green
@@ -302,6 +347,20 @@ describe('diff: ignoreCosmetic — 表記揺れを無視した比較', () => {
     const result = diffCss(old, next, { ignoreCosmetic: true })
     expect(getPropDiff(result, 'base', '.a', 'margin')?.status).toBe('unchanged')
   })
+
+  it('calc 内の + 直後の先頭ゼロ省略は unchanged になる', () => {
+    const old = `.a { margin: calc(max(1em, 2em) + 0.5rem); }`
+    const next = `.a { margin: calc(max(1em,2em) + .5rem); }`
+    const result = diffCss(old, next, { ignoreCosmetic: true })
+    expect(getPropDiff(result, 'base', '.a', 'margin')?.status).toBe('unchanged')
+  })
+
+  it('4桁 hex alpha の短縮形は 8桁へ正規化され unchanged になる', () => {
+    const old = `.a { color: #0f08; }`
+    const next = `.a { color: #00ff0088; }`
+    const result = diffCss(old, next, { ignoreCosmetic: true })
+    expect(getPropDiff(result, 'base', '.a', 'color')?.status).toBe('unchanged')
+  })
 })
 
 describe('diff: semanticSelectors — 属性セレクタのクォート等価', () => {
@@ -380,5 +439,119 @@ describe('diff: @supports の url() 正規化', () => {
     const result = diffCss(css, css)
     const ctxKey = '@supports (background: url("(test)"))'
     expect(result.get(ctxKey)?.status).toBe('unchanged')
+  })
+})
+
+describe('diff: CSS カスタムプロパティ (--var)', () => {
+  it('カスタムプロパティの追加が検出される', () => {
+    const old = `.a { color: red; }`
+    const next = `.a { color: red; --my-color: blue; }`
+    const result = diffCss(old, next)
+    expect(getPropDiff(result, 'base', '.a', '--my-color')?.status).toBe('added')
+    expect(getPropDiff(result, 'base', '.a', '--my-color')?.newValue).toBe('blue')
+  })
+
+  it('カスタムプロパティの値変更が changed として検出される', () => {
+    const old = `.a { --my-color: red; }`
+    const next = `.a { --my-color: blue; }`
+    const result = diffCss(old, next)
+    expect(getPropDiff(result, 'base', '.a', '--my-color')?.status).toBe('changed')
+    expect(getPropDiff(result, 'base', '.a', '--my-color')?.oldValue).toBe('red')
+    expect(getPropDiff(result, 'base', '.a', '--my-color')?.newValue).toBe('blue')
+  })
+
+  it('カスタムプロパティの削除が removed として検出される', () => {
+    const old = `.a { --my-color: red; color: var(--my-color); }`
+    const next = `.a { color: var(--my-color); }`
+    const result = diffCss(old, next)
+    expect(getPropDiff(result, 'base', '.a', '--my-color')?.status).toBe('removed')
+  })
+
+  it('カスタムプロパティが変わらなければ unchanged', () => {
+    const css = `.a { --spacing: 8px; }`
+    const result = diffCss(css, css)
+    expect(getPropDiff(result, 'base', '.a', '--spacing')?.status).toBe('unchanged')
+  })
+})
+
+describe('diff: @font-face', () => {
+  it('@font-face の src 変更が changed として検出される', () => {
+    const old = `@font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto.woff2); }`
+    const next = `@font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto-v2.woff2); }`
+    const result = diffCss(old, next)
+    // セレクタキーは getFontFaceKey により "Roboto/400/normal" の形式
+    const prop = getPropDiff(result, '@font-face', 'Roboto/400/normal', 'src')
+    expect(prop?.status).toBe('changed')
+  })
+
+  it('新しいウェイトの @font-face 追加が added として検出される', () => {
+    const old = `@font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto.woff2); }`
+    const next = `
+      @font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto.woff2); }
+      @font-face { font-family: 'Roboto'; font-weight: 700; src: url(roboto-bold.woff2); }
+    `
+    const result = diffCss(old, next)
+    expect(getSelectorDiff(result, '@font-face', 'Roboto/700/normal')?.status).toBe('added')
+  })
+
+  it('@font-face が削除されると removed になる', () => {
+    const old = `@font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto.woff2); }`
+    const next = ``
+    const result = diffCss(old, next)
+    expect(getSelectorDiff(result, '@font-face', 'Roboto/400/normal')?.status).toBe('removed')
+  })
+})
+
+describe('diff: @keyframes', () => {
+  it('@keyframes のプロパティ変更が changed として検出される', () => {
+    const old = `@keyframes fade { from { opacity: 1; } to { opacity: 0; } }`
+    const next = `@keyframes fade { from { opacity: 1; } to { opacity: 0.5; } }`
+    const result = diffCss(old, next)
+    const prop = getPropDiff(result, '@keyframes fade', 'to', 'opacity')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('0')
+    expect(prop?.newValue).toBe('0.5')
+  })
+
+  it('@keyframes の追加が added コンテキストとして検出される', () => {
+    const old = `.a { color: red; }`
+    const next = `.a { color: red; } @keyframes slide { from { transform: translateX(0); } to { transform: translateX(100px); } }`
+    const result = diffCss(old, next)
+    expect(result.get('@keyframes slide')?.status).toBe('added')
+  })
+
+  it('@keyframes の削除が removed コンテキストとして検出される', () => {
+    const old = `@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }`
+    const next = ``
+    const result = diffCss(old, next)
+    expect(result.get('@keyframes pulse')?.status).toBe('removed')
+  })
+
+  it('@keyframes の変更は同名の @keyframes コンテキスト内で記録される', () => {
+    const old = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`
+    const next = `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(180deg); } }`
+    const result = diffCss(old, next)
+    expect(result.get('@keyframes spin')?.changeCount).toBeGreaterThan(0)
+  })
+})
+
+// ─── バグ検出テスト ────────────────────────────────────────────────────────────
+
+describe('diff: @font-face font-family 大文字小文字 [バグ]', () => {
+  it('font-family の大小文字差異は @font-face 内で removed+added でなく changed として扱う', () => {
+    // Bug-6 (CONFIRMED): getFontFaceKey が font-family 値を小文字化しないため
+    // @font-face コンテキスト内のセレクタキーが 'Roboto/400/normal' と 'roboto/400/normal' に
+    // 分かれ、同一フォントが removed + added として誤報告される
+    // CSS Fonts spec は font-family 名を大文字小文字不問で扱う
+    const oldCss = `@font-face { font-family: 'Roboto'; src: url(a.woff); font-weight: 400; }`
+    const newCss = `@font-face { font-family: 'roboto'; src: url(b.woff); font-weight: 400; }`
+    const result = diffCss(oldCss, newCss)
+    const ctx = result.get('@font-face')
+    const selectors = [...(ctx?.selectors?.entries() ?? [])]
+    const addedSels   = selectors.filter(([, v]) => v.status === 'added')
+    const removedSels = selectors.filter(([, v]) => v.status === 'removed')
+    // 同一フォントとして認識されるなら added/removed のセレクタペアが生じてはならない
+    expect(addedSels.length).toBe(0)
+    expect(removedSels.length).toBe(0)
   })
 })

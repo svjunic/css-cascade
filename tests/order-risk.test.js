@@ -67,6 +67,21 @@ describe('computeSpecificity', () => {
   it(':is(.a:not(:nth-child(2))) は二重ネストで [0,2,0] を返す', () => {
     expect(computeSpecificity(':is(.a:not(:nth-child(2)))')).toEqual([0, 2, 0])
   })
+  it(':has() は引数の最大詳細度を引き継ぐ', () => {
+    expect(computeSpecificity('.card:has(#featured, img.hero)')).toEqual([1, 1, 0])
+  })
+  it(':host() は自身の擬似クラスと引数詳細度を加算する', () => {
+    expect(computeSpecificity(':host(.active)')).toEqual([0, 2, 0])
+  })
+  it('::slotted() は擬似要素自身と引数詳細度を加算する', () => {
+    expect(computeSpecificity('::slotted(.item)')).toEqual([0, 1, 1])
+  })
+  it('エスケープされた Tailwind 風クラスは 1 クラスとして数える', () => {
+    expect(computeSpecificity('.md\\:hover\\:text-red-500:hover')).toEqual([0, 2, 0])
+  })
+  it('名前空間つき要素セレクタは要素として数える', () => {
+    expect(computeSpecificity('svg|a.icon')).toEqual([0, 1, 1])
+  })
 })
 
 describe('sameSpecificity', () => {
@@ -356,6 +371,40 @@ describe('computeOrderRisks — @media 内のスワップ', () => {
   })
 })
 
+describe('computeOrderRisks — semanticSelectors と importance/specificity', () => {
+  it('semanticSelectors ON では属性セレクタのクォート差だけで moved を出さない', () => {
+    const old = `.a [class*='list'] { color: red; } .b { color: blue; }`
+    const newCss = `.a [class*=list] { color: red; } .b { color: blue; }`
+    const risks = computeOrderRisks(old, newCss, { semanticSelectors: true })
+    expect(risks).toHaveLength(0)
+  })
+
+  it('同一詳細度でも !important の勝者が変わらない順序変更は conflictingProps を出さない', () => {
+    const old = `.a { color: red !important; } .b { color: blue; }`
+    const newCss = `.b { color: blue; } .a { color: red !important; }`
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    const moved = base.rows.filter(r => r.type === 'moved')
+
+    expect(moved.length).toBeGreaterThan(0)
+    moved.forEach(row => expect(row.conflictingProps).toHaveLength(0))
+  })
+
+  it(':where() で詳細度が下がるセレクタは通常クラスとの順序変更を詳細度差として扱う', () => {
+    const old = `:where(.a) { color: red; } .b { color: blue; }`
+    const newCss = `.b { color: blue; } :where(.a) { color: red; }`
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    const moved = base.rows.filter(r => r.type === 'moved')
+
+    expect(moved.length).toBeGreaterThan(0)
+    moved.forEach(row => {
+      expect(row.sameSpecificity).toBe(false)
+      expect(row.conflictingProps).toHaveLength(0)
+    })
+  })
+})
+
 describe('computeOrderRisks — 既存サンプルデータ (.mogeta2-*)', () => {
   const old = `
     .mogeta2-1--moge-ta { color: blue; }
@@ -446,5 +495,132 @@ describe('computeOrderRisks — 相対順不変ペアの偽陽性抑制（A,B,C,
     expect(abPair).toBeDefined()
     expect(abPair.conflictingProps.length).toBeGreaterThan(0)
     expect(abPair.conflictingProps.map(p => p.prop)).toContain('color')
+  })
+})
+
+describe('computeOrderRisks — @supports 内のスワップ', () => {
+  const old = `
+    @supports (display: grid) {
+      .a { color: red; }
+      .b { color: blue; }
+    }
+  `
+  const newCss = `
+    @supports (display: grid) {
+      .b { color: blue; }
+      .a { color: red; }
+    }
+  `
+
+  it('@supports コンテキストで moved 行を検知する', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const ctx = risks.find(r => r.contextKey === '@supports (display: grid)')
+    expect(ctx).toBeDefined()
+    expect(ctx.hasWarning).toBe(true)
+    expect(ctx.rows.filter(r => r.type === 'moved').length).toBeGreaterThan(0)
+  })
+
+  it('@supports 内のスワップで競合プロパティが検知される', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const ctx = risks.find(r => r.contextKey === '@supports (display: grid)')
+    const moved = ctx.rows.filter(r => r.type === 'moved')
+    const hasConflict = moved.some(r => r.conflictingProps.length > 0)
+    expect(hasConflict).toBe(true)
+  })
+})
+
+describe('computeOrderRisks — @container 内のスワップ', () => {
+  const old = `
+    @container card (min-width: 320px) {
+      .a { color: red; }
+      .b { color: blue; }
+    }
+  `
+  const newCss = `
+    @container card (min-width: 320px) {
+      .b { color: blue; }
+      .a { color: red; }
+    }
+  `
+
+  it('@container コンテキストで moved 行を検知する', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const ctx = risks.find(r => r.contextKey === '@container card (min-width: 320px)')
+    expect(ctx).toBeDefined()
+    expect(ctx.hasWarning).toBe(true)
+    expect(ctx.rows.filter(r => r.type === 'moved').length).toBeGreaterThan(0)
+  })
+
+  it('@container 内のスワップで競合プロパティが検知される', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const ctx = risks.find(r => r.contextKey === '@container card (min-width: 320px)')
+    const moved = ctx.rows.filter(r => r.type === 'moved')
+    const hasConflict = moved.some(r => r.conflictingProps.length > 0)
+    expect(hasConflict).toBe(true)
+  })
+})
+
+describe('computeOrderRisks — !important 同士のスワップ', () => {
+  // 両方が !important の場合、後勝ちが適用される。
+  // old: .b が後 → .b が勝ち (blue)
+  // new: .a が後 → .a が勝ち (red)
+  // → 有効値が変わるので conflictingProps に color が含まれる。
+  const old = `
+    .a { color: red !important; }
+    .b { color: blue !important; }
+  `
+  const newCss = `
+    .b { color: blue !important; }
+    .a { color: red !important; }
+  `
+
+  it('両者 !important かつ値が異なるスワップでは競合を検出する', () => {
+    const risks = computeOrderRisks(old, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    expect(base).toBeDefined()
+    const moved = base.rows.filter(r => r.type === 'moved')
+    expect(moved.length).toBeGreaterThan(0)
+    const hasConflict = moved.some(r => r.conflictingProps.some(p => p.prop === 'color'))
+    expect(hasConflict).toBe(true)
+  })
+})
+
+// ─── バグ検出テスト ────────────────────────────────────────────────────────────
+
+describe('computeOrderRisks: hasWarning 偽陽性 [バグ]', () => {
+  it('共通プロパティを持たないセレクタのスワップは hasWarning: false', () => {
+    // Bug-3 (CONFIRMED): hasWarning は rows.some(r => r.type === 'moved') だけで判定しており
+    // conflictingProps が空でも true になる
+    const oldCss = `.layout { display: flex; } .color { color: red; }`
+    const newCss = `.color { color: red; } .layout { display: flex; }`
+    const risks = computeOrderRisks(oldCss, newCss)
+    const ctx = risks.find(r => r.contextKey === 'base')
+    expect(ctx?.hasWarning).toBe(false)
+  })
+})
+
+describe('computeOrderRisks: 競合重複報告 [バグ]', () => {
+  it('.foo↔.bar スワップで color 競合は1件のみ報告される', () => {
+    // Bug-4 (CONFIRMED): pairing が {.foo→.bar, .bar→.foo} の2行を生成し
+    // annotateMovedRow が両行で同じ color 競合を push する
+    const oldCss = `.foo { color: red; } .bar { color: blue; }`
+    const newCss = `.bar { color: blue; } .foo { color: red; }`
+    const risks = computeOrderRisks(oldCss, newCss)
+    const ctx = risks.find(r => r.contextKey === 'base')
+    const colorConflicts = ctx?.rows?.flatMap(r => r.conflictingProps ?? []).filter(c => c.prop === 'color')
+    expect(colorConflicts?.length).toBe(1)
+  })
+})
+
+describe('computeOrderRisks: 新規プロパティ競合の見逃し [バグ]', () => {
+  it('両セレクタが新規に同プロパティを宣言しつつ順序スワップした場合に競合を検出する', () => {
+    // Bug-5 (CONFIRMED): pickWinner は oldA か oldX のどちらかが undefined のとき null を返し
+    // if (!oldWinner || !newWinner) continue でスキップされるため検出されない
+    const oldCss = `.a { font-size: 1em; } .b { margin: 0; }`
+    const newCss = `.b { margin: 0; color: blue; } .a { font-size: 1em; color: red; }`
+    const risks = computeOrderRisks(oldCss, newCss)
+    const ctx = risks.find(r => r.contextKey === 'base')
+    const movedRow = ctx?.rows?.find(r => r.type === 'moved')
+    expect(movedRow?.conflictingProps?.some(c => c.prop === 'color')).toBe(true)
   })
 })
