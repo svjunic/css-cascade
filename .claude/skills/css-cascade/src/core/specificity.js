@@ -129,20 +129,6 @@ export function computeSpecificity(selector, _depth = 0) {
     a += maxSpec[0]; b += maxSpec[1]; c += maxSpec[2]
   }
 
-  // 引数付き擬似要素 ::slotted()・::cue() は擬似要素自体 (c) に加え、引数セレクタの詳細度を加算する。
-  // 通常の ::xxx ストリップより先に処理し、引数を取りこぼさない。
-  s = stripPseudoBlocks(s, /::(?:slotted|cue)\s*\(/gi, (str, innerStart, end) => {
-    addArgMaxSpec(str.slice(innerStart, end - 1).trim())
-    c++ // 擬似要素自体
-  })
-
-  // 擬似要素 ::xxx を除去してカウント（引数付きは上で処理済み）
-  s = s.replace(/::[\w-]+(\([^)]*\))?/g, () => { c++; return '' })
-
-  // レガシー単一コロン擬似要素 :before/:after/:first-line/:first-letter は擬似要素 (c) として数える。
-  // 後段の汎用擬似クラスパス（b++）より先に処理する（:: 形式と詳細度を一致させる）。
-  s = s.replace(/:(?:before|after|first-line|first-letter)(?![\w-])/gi, () => { c++; return '' })
-
   // 関数形式の擬似クラスを 1 パスで処理する。左から順に最も外側のブロックだけを扱い、
   // その中身の詳細度は再帰 (computeSpecificity) に委ねる。1 パスにすることで
   // :is(:nth-child(2n), .b) のように入れ子になった :nth-child が、外側パスと
@@ -153,6 +139,8 @@ export function computeSpecificity(selector, _depth = 0) {
   //   - :host / :host-context        … 引数の MAX 詳細度 ＋ 擬似クラス自体 b++（CSS Scoping Level 1）
   //   - :where                       … 常に詳細度 0（何も加算しない）
   // 括弧の深さは findMatchingParen が手動追跡するため任意の深さのネストに対応する。
+  // ※ ::xxx グローバル除去より先に処理することで、:is(::before, div) のように
+  //   擬似クラスの引数に擬似要素が含まれる場合の二重カウントを防ぐ。
   s = stripPseudoBlocks(
     s,
     /:(?<name>nth-child|nth-last-child|not|is|has|matches|where|host-context|host)\s*\(/gi,
@@ -173,6 +161,21 @@ export function computeSpecificity(selector, _depth = 0) {
       }
     }
   )
+
+  // 引数付き擬似要素 ::slotted()・::cue() は擬似要素自体 (c) に加え、引数セレクタの詳細度を加算する。
+  // 関数形式擬似クラスの処理後に行うことで、:is(::slotted(.foo)) のような入れ子での
+  // 二重カウントを防ぐ（:is() 処理時に再帰へ委ねられるため）。
+  s = stripPseudoBlocks(s, /::(?:slotted|cue)\s*\(/gi, (str, innerStart, end) => {
+    addArgMaxSpec(str.slice(innerStart, end - 1).trim())
+    c++ // 擬似要素自体
+  })
+
+  // 擬似要素 ::xxx を除去してカウント（引数付きは上で処理済み）
+  s = s.replace(/::[\w-]+(\([^)]*\))?/g, () => { c++; return '' })
+
+  // レガシー単一コロン擬似要素 :before/:after/:first-line/:first-letter は擬似要素 (c) として数える。
+  // 後段の汎用擬似クラスパス（b++）より先に処理する（:: 形式と詳細度を一致させる）。
+  s = s.replace(/:(?:before|after|first-line|first-letter)(?![\w-])/gi, () => { c++; return '' })
 
   // 属性セレクタ [...] を除去してカウント。
   // 関数形式擬似クラスの 1 パス処理の後に行うことで、擬似クラス内部の属性セレクタの二重カウントを防ぐ

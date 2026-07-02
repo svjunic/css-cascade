@@ -29,16 +29,54 @@ export function normalizeSelector(sel) {
  *       → "(min-width: 521px) and (max-width: 960px)"
  */
 export function normalizeMediaCondition(condition) {
-  // url() 内のコンテンツ（プロトコルコロン等）をコロン正規化の対象外にするため一時退避する
-  const urlSlots = []
-  // url() 内は quoted string を含む完全な CSS トークン規則で抽出する。
+  // url() および selector() 内のコンテンツをコロン正規化の対象外にするため一時退避する
+  const slots = []
+
+  // url() 保護: quoted string を含む完全な CSS トークン規則で抽出する。
   // 単純な [^)]* では url("it's (fine)") のように quoted string 内に ')' と
   // 別種クォートが混在する場合に誤マッチするため、quoted branch を個別に処理している。
-  const withoutUrls = condition.replace(/url\((?:[^)"'\\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')*\)/gi, m => {
-    urlSlots.push(m)
-    return '\x00' + (urlSlots.length - 1) + '\x00'
+  let s = condition.replace(/url\((?:[^)"'\\]|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')*\)/gi, m => {
+    slots.push(m)
+    return '\x00' + (slots.length - 1) + '\x00'
   })
-  const normalized = withoutUrls
+
+  // selector() 保護: @supports selector() の引数はセレクタ文字列のため
+  // 擬似クラスのコロンや not/only を正規化してはいけない。
+  // ネスト括弧（:not(.foo) 等）を含むため深さカウントで閉じ括弧を探す。
+  let out = ''
+  let i = 0
+  while (i < s.length) {
+    if (s[i] !== 's' && s[i] !== 'S') { out += s[i++]; continue }
+    const m = s.slice(i).match(/^selector\s*\(/i)
+    if (m) {
+      let depth = 1, j = i + m[0].length, quote = null, bracketDepth = 0
+      while (j < s.length && depth > 0) {
+        const ch = s[j]
+        if (quote) {
+          if (ch === quote) quote = null
+        } else if (ch === '"' || ch === "'") {
+          quote = ch
+        } else if (ch === '[') {
+          bracketDepth++
+        } else if (ch === ']') {
+          if (bracketDepth > 0) bracketDepth--
+        } else if (bracketDepth === 0 && ch === '(') {
+          depth++
+        } else if (bracketDepth === 0 && ch === ')') {
+          depth--
+        }
+        j++
+      }
+      slots.push(s.slice(i, j))
+      out += '\x00' + (slots.length - 1) + '\x00'
+      i = j
+    } else {
+      out += s[i++]
+    }
+  }
+  s = out
+
+  const normalized = s
     .trim()
     // コロン前後のスペースを正規化: "max-width:960px" / "max-width :960px" → "max-width: 960px"
     .replace(/\s*:\s*/g, ': ')
@@ -51,8 +89,8 @@ export function normalizeMediaCondition(condition) {
     // 末尾クリーンアップ
     .trim()
     .replace(/\s+/g, ' ')
-  // url() を元に戻す
-  return normalized.replace(/\x00(\d+)\x00/g, (_, i) => urlSlots[+i])
+  // url() / selector() を元に戻す
+  return normalized.replace(/\x00(\d+)\x00/g, (_, i) => slots[+i])
 }
 
 /**
@@ -105,7 +143,15 @@ export function canonicalizeValue(value) {
   // 先頭ゼロ補完: 数値の前に空白・カンマ・括弧・*/+-演算子・閉じ括弧がある場合、または行頭（符号も考慮）
   // ※ */空白除去より先に実行することで calc(1 * -.2em) の "-" 前のスペースを利用できる
   // ※ )+-を含めることで calc(max(1em,2em)+.5rem) や calc(max(1em,2em)-.5rem) も補完できる
-  v = v.replace(/(^|[\s,(*\/+)\-])([+-]?)\.(\d)/g, (_, pre, sign, digit) => `${pre}${sign}0.${digit}`)
+  v = v.replace(/(^|[\s,(*\/+)\-])([+-]?)\.(\d)/g, (_, pre, sign, digit) => {
+    // pre が減算演算子 '-' のとき: calc(a-.5em) → calc(a - 0.5em) とスペースを補完し
+    // calc(a - .5em) と同じ正規形にする（sign は空になる）
+    if (pre === '-') return ` - 0.${digit}`
+    return `${pre}${sign}0.${digit}`
+  })
+  // calc(a-0.5em) → calc(a - 0.5em): バイナリマイナスのスペース補完
+  // calc(a-.5em) は上のステップで calc(a - 0.5em) になるため、正規形を一致させる
+  v = v.replace(/([\d%\)])-(\d)/g, '$1 - $2')
   // * / 周辺の空白を除去
   v = v.replace(/\s*([*/])\s*/g, '$1')
   // 16進カラー正規化

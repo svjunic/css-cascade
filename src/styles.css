@@ -743,6 +743,12 @@ body {
   border: 1px solid var(--color-unchanged-border);
 }
 
+.or-ctx-badge--moved {
+  background: var(--color-added-bg);
+  color: var(--color-added-text);
+  border: 1px solid var(--color-added-border);
+}
+
 /* テーブル */
 .or-table-wrap {
   overflow-x: auto;
@@ -877,6 +883,11 @@ body {
 }
 
 .or-prop-name { font-weight: 700; }
+
+.or-prop-absent {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
 
 .or-prop-old {
   color: var(--color-removed-text);

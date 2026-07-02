@@ -29,6 +29,9 @@ function buildOrderRows(oldList, newList) {
 
   const rows = []
   let ni = 0
+  // 対称スワップ（A→B かつ B→A）で同じペアの moved 行が2つ生成されるのを防ぐ。
+  // 正規化したペアキーを追跡し、逆方向の行はスキップする（ni は消費する）。
+  const seenMovedPairs = new Set()
 
   for (const oldSel of oldList) {
     if (!newSet.has(oldSel)) {
@@ -45,11 +48,16 @@ function buildOrderRows(oldList, newList) {
       ni++
     }
 
-    rows.push(
-      oldSel === pairedNew
-        ? { type: 'equal', oldSelector: oldSel, newSelector: pairedNew }
-        : { type: 'moved', oldSelector: oldSel, newSelector: pairedNew },
-    )
+    if (oldSel === pairedNew) {
+      rows.push({ type: 'equal', oldSelector: oldSel, newSelector: pairedNew })
+    } else {
+      const pairKey = [oldSel, pairedNew].sort().join('\x00')
+      if (!seenMovedPairs.has(pairKey)) {
+        seenMovedPairs.add(pairKey)
+        rows.push({ type: 'moved', oldSelector: oldSel, newSelector: pairedNew })
+      }
+      // 逆方向の行はスキップ（ni は消費する）
+    }
     ni++ // pairedNew を消費
   }
 
@@ -95,6 +103,7 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   const selX = row.newSelector
   row.sameSpecificity = sameSpecificity(selA, selX)
   row.conflictingProps = []
+  row.hasOverlappingProps = false
 
   const oldPosA = oldList.indexOf(selA)
   const oldPosX = oldList.indexOf(selX)
@@ -121,13 +130,33 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   for (const [prop, entryNewA] of newA) {
     const entryNewX = newX.get(prop)
     if (!entryNewX) continue
+    // 両セレクタが同プロパティを宣言している（値が同じでも hasOverlappingProps=true）
+    row.hasOverlappingProps = true
     if (entryNewA.value === entryNewX.value && entryNewA.important === entryNewX.important) continue
 
     // 旧・新それぞれの並び順で勝者を判定する。
     // 詳細度が異なる場合は順序に関わらず同じセレクタが勝つため、有効値は変わらない＝誤検出しない。
     const oldWinner = pickWinner(selA, selX, oldA.get(prop), oldX.get(prop), specCmp, oldPosA, oldPosX)
     const newWinner = pickWinner(selA, selX, entryNewA, entryNewX, specCmp, newPosA, newPosX)
-    if (!oldWinner || !newWinner) continue
+    if (!newWinner) continue
+
+    if (!oldWinner) {
+      // 旧 CSS では両セレクタともこのプロパティを宣言していなかった（新規追加）。
+      // 旧ソース順で新プロパティを適用した場合の代替勝者と、実際の新勝者を比較し、
+      // 順序変更によって有効値が変わる場合のみ競合として報告する。
+      const altWinner = pickWinner(selA, selX, entryNewA, entryNewX, specCmp, oldPosA, oldPosX)
+      if (!altWinner || altWinner === newWinner) continue
+      const altEff = newCtxProps.get(altWinner)?.get(prop)
+      const newEff = newCtxProps.get(newWinner)?.get(prop)
+      if (!altEff || !newEff) continue
+      if (altEff.value === newEff.value && altEff.important === newEff.important) continue
+      row.conflictingProps.push({
+        prop,
+        oldEffective: null,
+        newEffective: { value: newEff.value, important: newEff.important },
+      })
+      continue
+    }
 
     const oldEff = oldCtxProps.get(oldWinner)?.get(prop)
     const newEff = newCtxProps.get(newWinner)?.get(prop)
@@ -173,7 +202,8 @@ export function computeOrderRisks(oldCss, newCss, options = {}) {
       }
     }
 
-    const hasWarning = rows.some(r => r.type === 'moved')
+    // 共通プロパティを持つ moved 行がある場合のみ warning（無関係プロパティのスワップは除外）
+    const hasWarning = rows.some(r => r.type === 'moved' && r.hasOverlappingProps)
 
     if (rows.some(r => r.type !== 'equal')) {
       results.push({ contextKey, rows, hasWarning })

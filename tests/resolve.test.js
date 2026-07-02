@@ -171,8 +171,8 @@ describe('resolve: @font-face と @keyframes', () => {
     `
     const resolved = resolve(parseCss(css))
 
-    expect(getProps(resolved, '@font-face', 'Inter/400/normal').get('src')?.value).toBe('url(inter-regular.woff2)')
-    expect(getProps(resolved, '@font-face', 'Inter/700/normal').get('src')?.value).toBe('url(inter-bold.woff2)')
+    expect(getProps(resolved, '@font-face', 'inter/400/normal').get('src')?.value).toBe('url(inter-regular.woff2)')
+    expect(getProps(resolved, '@font-face', 'inter/700/normal').get('src')?.value).toBe('url(inter-bold.woff2)')
   })
 
   it('@font-face の同一 family/weight/style は後勝ちで解決される', () => {
@@ -190,7 +190,7 @@ describe('resolve: @font-face と @keyframes', () => {
     `
     const resolved = resolve(parseCss(css))
 
-    expect(getProps(resolved, '@font-face', 'Inter/400/normal').get('src')?.value).toBe('url(new.woff2)')
+    expect(getProps(resolved, '@font-face', 'inter/400/normal').get('src')?.value).toBe('url(new.woff2)')
   })
 
   it('@keyframes は animation name ごとのコンテキストで stop を疑似セレクタとして扱う', () => {

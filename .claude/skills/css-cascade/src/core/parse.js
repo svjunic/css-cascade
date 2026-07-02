@@ -25,9 +25,9 @@ function getFontFaceKey(declarations) {
       parts[p] = normalizeValue(decl.value).replace(/['"]/g, '')
     }
   }
-  const family = parts['font-family'] || 'unknown'
-  const weight = parts['font-weight'] || 'normal'
-  const style = parts['font-style'] || 'normal'
+  const family = (parts['font-family'] || 'unknown').toLowerCase()
+  const weight = (parts['font-weight'] || 'normal').toLowerCase()
+  const style = (parts['font-style'] || 'normal').toLowerCase()
   return `${family}/${weight}/${style}`
 }
 

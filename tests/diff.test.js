@@ -193,7 +193,7 @@ describe('diff: @font-face と @keyframes', () => {
       }
     `
     const result = diffCss(old, next)
-    const prop = getPropDiff(result, '@font-face', 'Inter/400/normal', 'src')
+    const prop = getPropDiff(result, '@font-face', 'inter/400/normal', 'src')
 
     expect(prop?.status).toBe('changed')
     expect(prop?.oldValue).toBe('url(old.woff2)')
@@ -355,6 +355,13 @@ describe('diff: ignoreCosmetic — 表記揺れを無視した比較', () => {
     expect(getPropDiff(result, 'base', '.a', 'margin')?.status).toBe('unchanged')
   })
 
+  it('calc 内の binary minus スペース違い (50%-0.5rem vs 50% - 0.5rem) は unchanged になる', () => {
+    const old  = `.a { width: calc(50%-0.5rem); }`
+    const next = `.a { width: calc(50% - 0.5rem); }`
+    const result = diffCss(old, next, { ignoreCosmetic: true })
+    expect(getPropDiff(result, 'base', '.a', 'width')?.status).toBe('unchanged')
+  })
+
   it('4桁 hex alpha の短縮形は 8桁へ正規化され unchanged になる', () => {
     const old = `.a { color: #0f08; }`
     const next = `.a { color: #00ff0088; }`
@@ -480,7 +487,7 @@ describe('diff: @font-face', () => {
     const next = `@font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto-v2.woff2); }`
     const result = diffCss(old, next)
     // セレクタキーは getFontFaceKey により "Roboto/400/normal" の形式
-    const prop = getPropDiff(result, '@font-face', 'Roboto/400/normal', 'src')
+    const prop = getPropDiff(result, '@font-face', 'roboto/400/normal', 'src')
     expect(prop?.status).toBe('changed')
   })
 
@@ -491,14 +498,14 @@ describe('diff: @font-face', () => {
       @font-face { font-family: 'Roboto'; font-weight: 700; src: url(roboto-bold.woff2); }
     `
     const result = diffCss(old, next)
-    expect(getSelectorDiff(result, '@font-face', 'Roboto/700/normal')?.status).toBe('added')
+    expect(getSelectorDiff(result, '@font-face', 'roboto/700/normal')?.status).toBe('added')
   })
 
   it('@font-face が削除されると removed になる', () => {
     const old = `@font-face { font-family: 'Roboto'; font-weight: 400; src: url(roboto.woff2); }`
     const next = ``
     const result = diffCss(old, next)
-    expect(getSelectorDiff(result, '@font-face', 'Roboto/400/normal')?.status).toBe('removed')
+    expect(getSelectorDiff(result, '@font-face', 'roboto/400/normal')?.status).toBe('removed')
   })
 })
 
@@ -538,9 +545,20 @@ describe('diff: @keyframes', () => {
 // ─── バグ検出テスト ────────────────────────────────────────────────────────────
 
 describe('diff: @font-face font-family 大文字小文字 [バグ]', () => {
+  it('font-weight の大小文字差異は同一フォントとして扱う', () => {
+    const oldCss = `@font-face { font-family: 'Roboto'; font-weight: Bold; src: url(a.woff); }`
+    const newCss = `@font-face { font-family: 'Roboto'; font-weight: bold; src: url(b.woff); }`
+    const result = diffCss(oldCss, newCss)
+    const ctx = result.get('@font-face')
+    const added   = [...(ctx?.selectors?.values() ?? [])].filter(v => v.status === 'added')
+    const removed = [...(ctx?.selectors?.values() ?? [])].filter(v => v.status === 'removed')
+    expect(added.length).toBe(0)
+    expect(removed.length).toBe(0)
+  })
+
   it('font-family の大小文字差異は @font-face 内で removed+added でなく changed として扱う', () => {
     // Bug-6 (CONFIRMED): getFontFaceKey が font-family 値を小文字化しないため
-    // @font-face コンテキスト内のセレクタキーが 'Roboto/400/normal' と 'roboto/400/normal' に
+    // @font-face コンテキスト内のセレクタキーが 'roboto/400/normal' と 'roboto/400/normal' に
     // 分かれ、同一フォントが removed + added として誤報告される
     // CSS Fonts spec は font-family 名を大文字小文字不問で扱う
     const oldCss = `@font-face { font-family: 'Roboto'; src: url(a.woff); font-weight: 400; }`

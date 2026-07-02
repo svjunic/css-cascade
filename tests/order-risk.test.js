@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { computeOrderRisks } from '../src/core/order-risk.js'
 import { computeSpecificity, sameSpecificity } from '../src/core/specificity.js'
 import { parseSelectorOrder } from '../src/core/parse.js'
+import { renderOrderRisks } from '../src/ui/render.js'
 
 // ─── specificity ──────────────────────────────────────────────────────────
 
@@ -176,22 +177,23 @@ describe('computeOrderRisks — パターン1: 単純スワップ', () => {
     .s6 { color: red; }
   `
 
-  it('base コンテキストで moved 行が 2 件検知される', () => {
+  it('base コンテキストで moved 行が検知される', () => {
     const risks = computeOrderRisks(old, newCss)
     const base = risks.find(r => r.contextKey === 'base')
     expect(base).toBeDefined()
     expect(base.hasWarning).toBe(true)
     const moved = base.rows.filter(r => r.type === 'moved')
-    expect(moved).toHaveLength(2)
+    // 対称スワップは重複排除により1ペアとして報告される
+    expect(moved).toHaveLength(1)
   })
 
-  it('moved 行が (.s3, .s5) と (.s5, .s3) のペアになる', () => {
+  it('moved 行が (.s3, .s5) のペアになる', () => {
     const risks = computeOrderRisks(old, newCss)
     const base = risks.find(r => r.contextKey === 'base')
     const moved = base.rows.filter(r => r.type === 'moved')
     const selPairs = moved.map(r => [r.oldSelector, r.newSelector])
+    // 対称スワップは old 側の出現順が先のほうのペアが報告される
     expect(selPairs).toContainEqual(['.s3', '.s5'])
-    expect(selPairs).toContainEqual(['.s5', '.s3'])
   })
 
   it('競合プロパティ (color, font-weight) が検知される', () => {
@@ -622,5 +624,70 @@ describe('computeOrderRisks: 新規プロパティ競合の見逃し [バグ]', 
     const ctx = risks.find(r => r.contextKey === 'base')
     const movedRow = ctx?.rows?.find(r => r.type === 'moved')
     expect(movedRow?.conflictingProps?.some(c => c.prop === 'color')).toBe(true)
+  })
+})
+
+// ─── renderOrderRisks ─────────────────────────────────────────────────────────
+
+describe('renderOrderRisks — R-1: hasWarning=false でも moved があればセクションを表示', () => {
+  it('共通プロパティなしスワップは hasWarning=false だがセクションが返る', () => {
+    const oldCss = `.layout { display: flex; } .color { color: red; }`
+    const newCss = `.color { color: red; } .layout { display: flex; }`
+    const risks = computeOrderRisks(oldCss, newCss)
+    // hasWarning=false のコンテキストのみ → totalWarnings=0 だが moved 行は存在する
+    expect(risks[0]?.hasWarning).toBe(false)
+    const html = renderOrderRisks(risks)
+    expect(html).not.toBe('')
+    expect(html).toContain('order-risks-section')
+  })
+
+  it('moved 行が 0 件のとき空文字列を返す', () => {
+    const css = `.a { color: red; } .b { color: blue; } .c { color: green; }`
+    const risks = computeOrderRisks(css, css)
+    expect(renderOrderRisks(risks)).toBe('')
+  })
+})
+
+describe('renderOrderRisks — R-2: ヘッダーバッジはコンテキスト数でなく moved ペア数', () => {
+  it('1 コンテキストに 2 ペアの moved 行があるとき "2 件" と表示する', () => {
+    // .a↔.b と .c↔.d の 2 ペアスワップ → 1 コンテキスト, 2 moved ペア
+    const oldCss = `.a { color: red; } .b { color: blue; } .c { font-size: 1em; } .d { font-size: 2em; }`
+    const newCss = `.b { color: blue; } .a { color: red; } .d { font-size: 2em; } .c { font-size: 1em; }`
+    const risks = computeOrderRisks(oldCss, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    expect(base?.rows.filter(r => r.type === 'moved').length).toBe(2)
+    const html = renderOrderRisks(risks)
+    // ヘッダーバッジは "2 件の順序変更"（コンテキスト数 1 ではなくペア数 2）
+    expect(html).toContain('2 件の順序変更')
+  })
+})
+
+describe('renderOrderRisks — R-3: コンテキストバッジは moved 行がある場合「順序変更なし」と表示しない', () => {
+  it('hasWarning=false でも moved 行があれば「N 件の順序変更（リスクなし）」バッジを表示する', () => {
+    const oldCss = `.layout { display: flex; } .color { color: red; }`
+    const newCss = `.color { color: red; } .layout { display: flex; }`
+    const risks = computeOrderRisks(oldCss, newCss)
+    expect(risks[0]?.hasWarning).toBe(false)
+    const html = renderOrderRisks(risks)
+    expect(html).not.toContain('順序変更なし')
+    expect(html).toContain('件の順序変更（リスクなし）')
+  })
+
+  it('moved 行が存在しないコンテキストには「順序変更なし」バッジを表示する', () => {
+    // base: .b が削除のみ（moved なし）→ "順序変更なし" バッジ
+    // @media: .x↔.y スワップ（moved あり）→ セクション全体が表示される
+    const oldCss = `
+      .a { color: red; } .b { color: blue; }
+      @media (max-width: 768px) { .x { color: red; } .y { color: blue; } }
+    `
+    const newCss = `
+      .a { color: red; }
+      @media (max-width: 768px) { .y { color: blue; } .x { color: red; } }
+    `
+    const risks = computeOrderRisks(oldCss, newCss)
+    const base = risks.find(r => r.contextKey === 'base')
+    expect(base?.rows.filter(r => r.type === 'moved').length).toBe(0)
+    const html = renderOrderRisks(risks)
+    expect(html).toContain('順序変更なし')
   })
 })
