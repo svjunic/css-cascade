@@ -149,9 +149,9 @@ export function canonicalizeValue(value) {
     if (pre === '-') return ` - 0.${digit}`
     return `${pre}${sign}0.${digit}`
   })
-  // calc(a-0.5em) → calc(a - 0.5em): バイナリマイナスのスペース補完
-  // calc(a-.5em) は上のステップで calc(a - 0.5em) になるため、正規形を一致させる
-  v = v.replace(/([\d%\)])-(\d)/g, '$1 - $2')
+  // calc(50%-0.5rem) → calc(50% - 0.5rem): % または ) の直後のバイナリマイナスにスペースを補完
+  // [\d] を含めると content や unicode-range の digit-dash-digit も誤変換するため除外
+  v = v.replace(/([%\)])-(\d)/g, '$1 - $2')
   // * / 周辺の空白を除去
   v = v.replace(/\s*([*/])\s*/g, '$1')
   // 16進カラー正規化

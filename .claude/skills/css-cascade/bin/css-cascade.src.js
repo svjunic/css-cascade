@@ -236,8 +236,10 @@ if (values.format === 'json') {
           console.log(`  ${oldCol}  ${newCol}  ${c.yellow}⚠ 順序変更${c.reset}${spec}`)
           if (row.conflictingProps && row.conflictingProps.length > 0) {
             for (const cp of row.conflictingProps) {
-              const imp = v => v.important ? ' !important' : ''
-              console.log(`    ${c.dim}${cp.prop}: ${cp.oldEffective.value}${imp(cp.oldEffective)} → ${cp.newEffective.value}${imp(cp.newEffective)}${c.reset}`)
+              const imp = v => v?.important ? ' !important' : ''
+              const oldStr = cp.oldEffective ? `${cp.oldEffective.value}${imp(cp.oldEffective)}` : '旧 CSS 未宣言'
+              const newStr = cp.newEffective ? `${cp.newEffective.value}${imp(cp.newEffective)}` : '新 CSS 未宣言'
+              console.log(`    ${c.dim}${cp.prop}: ${oldStr} → ${newStr}${c.reset}`)
             }
           }
         } else if (row.type === 'deleted') {

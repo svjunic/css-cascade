@@ -345,7 +345,6 @@ function renderOrderRiskContext(ctxResult, expanded = false) {
   const { contextKey, rows, hasWarning } = ctxResult
   const label = contextKey === 'base' ? 'トップレベル (base)' : esc(contextKey)
   const movedCount = rows.filter(r => r.type === 'moved').length
-  const warningCount = rows.filter(r => r.type === 'moved' && r.hasOverlappingProps).length
   const badge = movedCount === 0
     ? `<span class="or-ctx-badge or-ctx-badge--ok">順序変更なし</span>`
     : hasWarning
@@ -390,8 +389,6 @@ function renderOrderRiskContext(ctxResult, expanded = false) {
 export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrderRisk = false, expandedContexts = new Set() } = {}) {
   if (!orderRisks || orderRisks.length === 0) return ''
 
-  const totalWarnings = orderRisks.filter(r => r.hasWarning).length
-
   // filterOrderRisk モードでは hasWarning=true のコンテキストのみ表示
   const contexts = filterOrderRisk
     ? orderRisks.filter(r => r.hasWarning)
@@ -407,12 +404,15 @@ export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrde
   const totalMovedCount = filtered.reduce((n, r) => n + r.rows.filter(row => row.type === 'moved').length, 0)
   if (totalMovedCount === 0) return ''
 
+  // 表示中コンテキストのみで警告有無を判定する（非表示コンテキストの警告を⚠に含めない）
+  const hasAnyWarning = filtered.some(r => r.hasWarning)
+
   const contextHtml = filtered.map(r => renderOrderRiskContext(r, expandedContexts.has(r.contextKey))).join('')
 
   return `<section class="order-risks-section">
     <div class="order-risks-header">
       <span class="order-risks-title">セレクタ出現順の比較</span>
-      ${totalWarnings > 0
+      ${hasAnyWarning
         ? `<span class="order-risks-count order-risks-count--warning">⚠️ ${totalMovedCount} 件の順序変更</span>`
         : `<span class="order-risks-count order-risks-count--ok">${totalMovedCount} 件の順序変更（リスクなし）</span>`
       }
