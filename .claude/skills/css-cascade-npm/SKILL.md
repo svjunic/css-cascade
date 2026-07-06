@@ -50,12 +50,13 @@ git diff --name-only HEAD -- '*.css'
 
 #### Step 3a: 各ファイルのHTMLレポートを生成する
 
-変更された各ファイルを個別に比較し、HTMLレポートを `css-cascade-report/YYYYMMDD-HHMMSS/` にタイムスタンプ付きサブディレクトリで出力する。
+変更された各ファイルを個別に比較し、HTMLレポートを `css-cascade-report/YYYYMMDD_HHMMSS-<cksum>/` にタイムスタンプ付きサブディレクトリで出力する。
 セレクタ順序の変更も検出するため `--order-risk` を常に付与する。
 
 ```bash
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-REPORT_DIR="css-cascade-report/$TIMESTAMP"
+KEY=$(git diff --name-only HEAD -- '*.css' | sort | cksum | cut -d' ' -f1)
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+REPORT_DIR="css-cascade-report/${TIMESTAMP}-${KEY}"
 [ -d "$REPORT_DIR" ] && echo "EXISTS:$REPORT_DIR" || echo "OK:$REPORT_DIR"
 ```
 
@@ -66,8 +67,9 @@ REPORT_DIR="css-cascade-report/$TIMESTAMP"
 「キャンセルする」が選択された場合はスキルの実行を中止する。
 
 ```bash
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-REPORT_DIR="css-cascade-report/$TIMESTAMP"
+KEY=$(git diff --name-only HEAD -- '*.css' | sort | cksum | cut -d' ' -f1)
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+REPORT_DIR="css-cascade-report/${TIMESTAMP}-${KEY}"
 mkdir -p "$REPORT_DIR"
 WORK_DIR=$(mktemp -d)
 
@@ -79,7 +81,12 @@ while IFS= read -r -d '' filepath; do
   node "<SKILL_DIR>/node_modules/.bin/css-cascade" \
     "$OLD" "$filepath" \
     --format html --order-risk > "$OUTPUT_HTML" 2>&1 || true
-  echo "HTMLレポート: file://$(pwd)/$OUTPUT_HTML"
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    WIN_PATH=$(wslpath -w "$(pwd)/$OUTPUT_HTML")
+    echo "HTMLレポート: file:///$WIN_PATH"
+  else
+    echo "HTMLレポート: file://$(pwd)/$OUTPUT_HTML"
+  fi
 done < <(git diff --name-only -z HEAD -- '*.css' | sort -z)
 
 rm -rf "$WORK_DIR"
