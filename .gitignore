@@ -25,12 +25,13 @@ coverage/
 .playwright-mcp/
 
 # CSS Diff Reports
-css-verify-report/
+css-cascade-report/
 
 # Claude Code
 CLAUDE.local.md
 .claude/worktrees
-.claude/skills
+.claude/skills/*
+!.claude/skills/css-cascade
 .claude/agents
 .claude/rules
 .claude/docs

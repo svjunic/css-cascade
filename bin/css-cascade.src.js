@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Copyright (c) 2026 sv.junic. MIT License. v0.2.0
-// Source: https://github.com/svjunic/css-diff
+// Source: https://github.com/svjunic/css-cascade
 
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
@@ -10,7 +10,7 @@ import { diff } from '../src/core/diff.js'
 import { computeOrderRisks } from '../src/core/order-risk.js'
 import { generateHtmlReport } from '../src/reporters/html.js'
 
-const HELP = `Usage: css-diff <old.css> <new.css> [options]
+const HELP = `Usage: css-cascade <old.css> <new.css> [options]
 
 Arguments:
   old.css    比較元 CSS ファイルのパス
@@ -28,8 +28,8 @@ Options:
   -h, --help                              ヘルプを表示
 
 Exit codes:
-  0  差分なし
-  1  差分あり
+  0  差分なし・順序変更なし
+  1  差分あり、または --order-risk 指定時に順序変更あり（プロパティ差分ゼロでも exit 1）
   2  エラー`
 
 let parsed
@@ -140,12 +140,13 @@ function summarize(result) {
 
 const summary = summarize(result)
 const hasDiff = summary.changed > 0 || summary.added > 0 || summary.removed > 0
+const hasOrderWarning = values['order-risk'] && orderRisks.some(r => r.hasWarning)
 const filter = values.filter
 
 if (values.format === 'html') {
   const html = generateHtmlReport(result, values['order-risk'] ? orderRisks : null)
   process.stdout.write(html)
-  process.exit(hasDiff ? 1 : 0)
+  process.exit((hasDiff || hasOrderWarning) ? 1 : 0)
 }
 
 if (values.format === 'json') {
@@ -211,7 +212,7 @@ if (values.format === 'json') {
   if (summary.changed) parts.push(`${c.yellow}${summary.changed} changed${c.reset}`)
   if (summary.added)   parts.push(`${c.green}${summary.added} added${c.reset}`)
   if (summary.removed) parts.push(`${c.red}${summary.removed} removed${c.reset}`)
-  if (filter === 'all' && summary.unchanged) parts.push(`${summary.unchanged} unchanged`)
+  if ((filter === 'all' || filter === 'unchanged') && summary.unchanged) parts.push(`${summary.unchanged} unchanged`)
   console.log(`\nSummary: ${parts.length ? parts.join(', ') : 'no differences'}`)
 
   if (values['order-risk'] && orderRisks.length > 0) {
@@ -235,8 +236,10 @@ if (values.format === 'json') {
           console.log(`  ${oldCol}  ${newCol}  ${c.yellow}⚠ 順序変更${c.reset}${spec}`)
           if (row.conflictingProps && row.conflictingProps.length > 0) {
             for (const cp of row.conflictingProps) {
-              const imp = v => v.important ? ' !important' : ''
-              console.log(`    ${c.dim}${cp.prop}: ${cp.oldEffective.value}${imp(cp.oldEffective)} → ${cp.newEffective.value}${imp(cp.newEffective)}${c.reset}`)
+              const imp = v => v?.important ? ' !important' : ''
+              const oldStr = cp.oldEffective ? `${cp.oldEffective.value}${imp(cp.oldEffective)}` : '旧 CSS 未宣言'
+              const newStr = cp.newEffective ? `${cp.newEffective.value}${imp(cp.newEffective)}` : '新 CSS 未宣言'
+              console.log(`    ${c.dim}${cp.prop}: ${oldStr} → ${newStr}${c.reset}`)
             }
           }
         } else if (row.type === 'deleted') {
@@ -249,4 +252,4 @@ if (values.format === 'json') {
   }
 }
 
-process.exit(hasDiff ? 1 : 0)
+process.exit((hasDiff || hasOrderWarning) ? 1 : 0)
