@@ -72,8 +72,7 @@ mkdir -p "$REPORT_DIR"
 WORK_DIR=$(mktemp -d)
 
 while IFS= read -r -d '' filepath; do
-  KEY=$(printf '%s' "$filepath" | cksum | cut -d' ' -f1)
-  SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')-${KEY}"
+  SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')"
   OLD="$WORK_DIR/old-${SLUG}.css"
   git show "HEAD:$filepath" > "$OLD" 2>/dev/null || : > "$OLD"
   OUTPUT_HTML="$REPORT_DIR/${SLUG}.html"
@@ -95,8 +94,7 @@ WORK_DIR=$(mktemp -d)
 
 while IFS= read -r -d '' filepath; do
   (
-    KEY=$(printf '%s' "$filepath" | cksum | cut -d' ' -f1)
-    SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')-${KEY}"
+    SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')"
     OLD="$WORK_DIR/old-${SLUG}.css"
     OUT="$WORK_DIR/out-${SLUG}.txt"
     git show "HEAD:$filepath" > "$OLD" 2>/dev/null || : > "$OLD"
@@ -111,8 +109,7 @@ wait
 
 OVERALL_EXIT=0
 while IFS= read -r -d '' filepath; do
-  KEY=$(printf '%s' "$filepath" | cksum | cut -d' ' -f1)
-  SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')-${KEY}"
+  SLUG="$(printf '%s' "$filepath" | tr '/ ' '__')"
   cat "$WORK_DIR/out-${SLUG}.txt"
   FILE_EXIT=$(cat "$WORK_DIR/exit-${SLUG}.code" 2>/dev/null || echo 0)
   [ "$FILE_EXIT" -gt "$OVERALL_EXIT" ] && OVERALL_EXIT=$FILE_EXIT
