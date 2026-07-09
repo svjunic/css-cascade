@@ -435,10 +435,11 @@ export function renderShorthandRisks(shorthandRisks) {
     const hasCtxWarning = selectors.some(s => s.conflicts.some(c => c.direction === 'A'))
 
     const selectorsHtml = selectors.map(({ selector, conflicts }) => {
-      const conflictsHtml = conflicts.map(({ shorthand, longhand, direction, longhandValue, shorthandValue }) => {
+      const conflictsHtml = conflicts.map(({ shorthand, longhand, direction, longhandValue, shorthandValue, oldShorthandValue }) => {
         const shn = esc(shorthand)
         const lhn = esc(longhand)
         const shv = esc(shorthandValue ?? '')
+        const oldShv = esc(oldShorthandValue ?? '')
         const lhv = esc(longhandValue ?? '')
         if (direction === 'A') {
           return `<div class="sr-conflict sr-conflict--risk">
@@ -450,7 +451,7 @@ export function renderShorthandRisks(shorthandRisks) {
           return `<div class="sr-conflict sr-conflict--resolved">
             <span class="sr-badge sr-badge--resolved">↗ 解消</span>
             <code class="sr-longhand">${lhn}</code>
-            <span class="sr-desc">の shorthand 上書きが解消（旧: <code>${shn}: ${shv}</code> に上書き → 新: <code>${lhn}: ${lhv}</code> が有効）</span>
+            <span class="sr-desc">の shorthand 上書きが解消（旧: <code>${shn}: ${oldShv}</code> に上書き → 新: <code>${lhn}: ${lhv}</code> が有効）</span>
           </div>`
         }
       }).join('')

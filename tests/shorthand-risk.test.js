@@ -195,6 +195,67 @@ describe('computeShorthandRisks — Fix #1: 新規追加セレクタは hasWarni
   })
 })
 
+describe('computeShorthandRisks — old* 値フィールドの検証', () => {
+  it('Case B: oldShorthandValue は old CSS の shorthand 値を返す（新旧で値が異なる）', () => {
+    // old: padding-right:40px が先、padding:16px が後 → shorthand(16px) が上書き
+    // new: padding:24px が先、padding-right:40px が後 → longhand(40px) が有効
+    const oldCss = `.foo { padding-right: 40px; padding: 16px; }`
+    const newCss = `.foo { padding: 24px; padding-right: 40px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    const conflict = result.risks.find(r => r.contextKey === 'base')
+      ?.selectors.find(s => s.selector === '.foo')
+      ?.conflicts.find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.direction).toBe('B')
+    expect(conflict.oldShorthandValue).toBe('16px') // 「旧」shorthand 値
+    expect(conflict.shorthandValue).toBe('24px')     // 「新」shorthand 値
+    expect(conflict.longhandValue).toBe('40px')      // 「新」longhand 値（有効）
+  })
+
+  it('Case A: oldLonghandValue は old CSS の longhand 値を返す（新旧で値が異なる）', () => {
+    // old: padding:8px が先、padding-right:40px が後 → longhand(40px) が有効
+    // new: padding-right:20px が先、padding:24px が後 → shorthand(24px) が上書き
+    const oldCss = `.foo { padding: 8px; padding-right: 40px; }`
+    const newCss = `.foo { padding-right: 20px; padding: 24px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    const conflict = result.risks.find(r => r.contextKey === 'base')
+      ?.selectors.find(s => s.selector === '.foo')
+      ?.conflicts.find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.direction).toBe('A')
+    expect(conflict.oldLonghandValue).toBe('40px')   // 「旧」longhand 値
+    expect(conflict.oldShorthandValue).toBe('8px')   // 「旧」shorthand 値
+    expect(conflict.shorthandValue).toBe('24px')     // 「新」shorthand 値（上書き）
+    expect(conflict.longhandValue).toBe('20px')      // 「新」longhand 値
+  })
+
+  it('Case B: old に longhand がない場合 oldLonghandValue は null', () => {
+    // old: shorthand のみ → old longhand 宣言が存在しない
+    const oldCss = `.foo { padding: 16px; }`
+    const newCss = `.foo { padding: 24px; padding-right: 40px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    const conflict = result.risks.find(r => r.contextKey === 'base')
+      ?.selectors.find(s => s.selector === '.foo')
+      ?.conflicts.find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.oldLonghandValue).toBeNull()
+    expect(conflict.oldShorthandValue).toBe('16px')
+  })
+
+  it('Case A: old に shorthand がない場合 oldShorthandValue は null', () => {
+    // old: longhand のみ → old shorthand 宣言が存在しない
+    const oldCss = `.foo { padding-right: 40px; }`
+    const newCss = `.foo { padding-right: 20px; padding: 24px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    const conflict = result.risks.find(r => r.contextKey === 'base')
+      ?.selectors.find(s => s.selector === '.foo')
+      ?.conflicts.find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.oldShorthandValue).toBeNull()
+    expect(conflict.oldLonghandValue).toBe('40px')
+  })
+})
+
 describe('computeShorthandRisks — Fix #6: 多段 shorthand での longhand 重複排除', () => {
   it('border と border-top が共存するとき border-top-width は 1 件のみ報告される', () => {
     // border と border-top は両方 border-top-width を longhand に持つ

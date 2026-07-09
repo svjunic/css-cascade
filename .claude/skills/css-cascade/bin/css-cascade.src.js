@@ -269,11 +269,11 @@ if (values.format === 'json') {
       for (const { selector, conflicts } of selectors) {
         console.log(`  ${c.dim}${selector}${c.reset}`)
         for (const conflict of conflicts) {
-          const { shorthand, longhand, direction, longhandValue, shorthandValue } = conflict
+          const { shorthand, longhand, direction, longhandValue, shorthandValue, oldLonghandValue, oldShorthandValue } = conflict
           if (direction === 'A') {
-            console.log(`    ${c.yellow}⚠ ${longhand}: shorthand に上書きされた（旧: ${longhand}:${longhandValue} が有効 → 新: ${shorthand}:${shorthandValue} に上書き）${c.reset}`)
+            console.log(`    ${c.yellow}⚠ ${longhand}: shorthand に上書きされた（旧: ${longhand}:${oldLonghandValue} が有効 → 新: ${shorthand}:${shorthandValue} に上書き）${c.reset}`)
           } else {
-            console.log(`    ${c.green}↗ ${longhand}: shorthand 上書き解消（旧: ${shorthand}:${shorthandValue} に上書き → 新: ${longhand}:${longhandValue} が有効）${c.reset}`)
+            console.log(`    ${c.green}↗ ${longhand}: shorthand 上書き解消（旧: ${shorthand}:${oldShorthandValue} に上書き → 新: ${longhand}:${longhandValue} が有効）${c.reset}`)
           }
         }
       }

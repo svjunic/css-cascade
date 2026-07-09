@@ -108,6 +108,16 @@ function getIntraWinner(decls, shorthand, longhand) {
   return bestShorthand.idx > bestLonghand.idx ? 'shorthand' : 'longhand'
 }
 
+function bestDecl(decls, prop) {
+  return decls.reduce((best, d) => {
+    if (d.prop !== prop) return best
+    if (!best) return d
+    if (d.layerRank > best.layerRank) return d
+    if (d.layerRank === best.layerRank && d.idx > best.idx) return d
+    return best
+  }, null)
+}
+
 export function computeShorthandRisks(oldCss, newCss, options = {}) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
   const parsedOld = parseCss(oldCss, parseOpts)
@@ -137,6 +147,9 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
         const newHasShorthand = newDecls.some(d => d.prop === shorthand)
         if (!newHasShorthand) continue
 
+        const bestShorthandDecl    = bestDecl(newDecls, shorthand)
+        const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
+
         for (const longhand of longhands) {
           const newHasLonghand = newDecls.some(d => d.prop === longhand)
           if (!newHasLonghand) continue
@@ -156,17 +169,7 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
             direction = 'B'
           }
 
-          const bestDecl = (decls, prop) => decls.reduce((best, d) => {
-            if (d.prop !== prop) return best
-            if (!best) return d
-            if (d.layerRank > best.layerRank) return d
-            if (d.layerRank === best.layerRank && d.idx > best.idx) return d
-            return best
-          }, null)
-
-          const bestShorthandDecl    = bestDecl(newDecls, shorthand)
           const bestLonghandDecl     = bestDecl(newDecls, longhand)
-          const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
           const oldBestLonghandDecl  = bestDecl(oldDecls, longhand)
 
           reportedLonghands.add(longhand)

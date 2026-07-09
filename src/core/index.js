@@ -40,7 +40,6 @@ export function applyShorthandRisksToDiff(diffResult, shorthandRisks) {
         oldShorthandImportant, oldLonghandImportant,
         shorthandImportant, longhandImportant,
       } of conflicts) {
-        if (oldWinner === newWinner) continue
         const oldEffective = oldWinner === 'longhand' ? oldLonghandValue : oldShorthandValue
         const newEffective = newWinner === 'longhand' ? longhandValue    : shorthandValue
 
