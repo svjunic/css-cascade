@@ -8,6 +8,8 @@ import { parseCss } from '../src/core/parse.js'
 import { resolve } from '../src/core/resolve.js'
 import { diff } from '../src/core/diff.js'
 import { computeOrderRisks } from '../src/core/order-risk.js'
+import { computeShorthandRisks } from '../src/core/shorthand-risk.js'
+import { applyShorthandRisksToDiff } from '../src/core/index.js'
 import { generateHtmlReport } from '../src/reporters/html.js'
 
 const HELP = `Usage: css-cascade <old.css> <new.css> [options]
@@ -21,6 +23,7 @@ Options:
   --filter <changed|added|removed|unchanged|all>
                                           ステータスで絞り込み (default: changed)
   --order-risk                            セレクタ出現順リスクを表示
+  --shorthand-risk                        shorthand/longhand の順序リスクを表示
   --ignore-cosmetic                       表記揺れを無視
   --semantic-selectors                    属性セレクタのクォート有無を同一視
   --no-color                              ANSI カラーを無効化
@@ -39,6 +42,7 @@ try {
       format:               { type: 'string',  default: 'text' },
       filter:               { type: 'string',  default: 'changed' },
       'order-risk':         { type: 'boolean', default: false },
+      'shorthand-risk':     { type: 'boolean', default: false },
       'ignore-cosmetic':    { type: 'boolean', default: false },
       'semantic-selectors': { type: 'boolean', default: false },
       'no-color':           { type: 'boolean', default: false },
@@ -101,6 +105,7 @@ const newCss = readFile(newPath)
 
 let result
 let orderRisks = []
+let shorthandRisks = { hasWarning: false, risks: [] }
 try {
   const parseOptions = { semanticSelectors: values['semantic-selectors'] }
   result = diff(
@@ -111,6 +116,9 @@ try {
   if (values['order-risk']) {
     orderRisks = computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
   }
+  // 常時計算して diff にマージ（--shorthand-risk フラグは raw 出力の有無のみ制御）
+  shorthandRisks = computeShorthandRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+  applyShorthandRisksToDiff(result, shorthandRisks)
 } catch (err) {
   console.error(`Parse error: ${err.message}`)
   process.exit(2)
@@ -141,12 +149,13 @@ function summarize(result) {
 const summary = summarize(result)
 const hasDiff = summary.changed > 0 || summary.added > 0 || summary.removed > 0
 const hasOrderWarning = values['order-risk'] && orderRisks.some(r => r.hasWarning)
+const hasShorthandWarning = values['shorthand-risk'] && shorthandRisks.hasWarning
 const filter = values.filter
 
 if (values.format === 'html') {
-  const html = generateHtmlReport(result, values['order-risk'] ? orderRisks : null)
+  const html = generateHtmlReport(result, values['order-risk'] ? orderRisks : null, values['shorthand-risk'] ? shorthandRisks : null)
   process.stdout.write(html)
-  process.exit((hasDiff || hasOrderWarning) ? 1 : 0)
+  process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
 }
 
 if (values.format === 'json') {
@@ -169,6 +178,7 @@ if (values.format === 'json') {
   }
   const output = { version: 1, summary, contexts }
   if (values['order-risk']) output.orderRisks = orderRisks
+  if (values['shorthand-risk']) output.shorthandRisks = shorthandRisks
   console.log(JSON.stringify(output, null, 2))
 } else {
   const useColor = !values['no-color'] && !!process.stdout.isTTY
@@ -250,6 +260,24 @@ if (values.format === 'json') {
       }
     }
   }
+
+  if (values['shorthand-risk'] && shorthandRisks.risks.length > 0) {
+    console.log(`\nShorthand Risks:`)
+    for (const { contextKey, selectors } of shorthandRisks.risks) {
+      console.log(`\n${c.cyan}[${contextKey}]${c.reset}`)
+      for (const { selector, conflicts } of selectors) {
+        console.log(`  ${c.dim}${selector}${c.reset}`)
+        for (const conflict of conflicts) {
+          const { shorthand, longhand, direction, longhandValue, shorthandValue } = conflict
+          if (direction === 'A') {
+            console.log(`    ${c.yellow}⚠ ${longhand}: shorthand に上書きされた（旧: ${longhand}:${longhandValue} が有効 → 新: ${shorthand}:${shorthandValue} に上書き）${c.reset}`)
+          } else {
+            console.log(`    ${c.green}↗ ${longhand}: shorthand 上書き解消（旧: ${shorthand}:${shorthandValue} に上書き → 新: ${longhand}:${longhandValue} が有効）${c.reset}`)
+          }
+        }
+      }
+    }
+  }
 }
 
-process.exit((hasDiff || hasOrderWarning) ? 1 : 0)
+process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)

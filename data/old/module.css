@@ -218,15 +218,53 @@ input[type="email"] {
   margin-block-start: 0;
 }
 
+/* ---- 評価順の違い ---- */
+.mogeta2-1 {
+  padding: 16px;
+  padding-right: 40px;
+}
+.mogeta2-2 {
+  padding: 16px;
+  padding-inline-end: 40px;
+}
+.mogeta2-3 {
+  padding: 16px;
+  padding-left: 20px;
+  padding-right: 40px;
+}
+.mogeta2-4 {
+  padding: 16px;
+  padding-inline-start: 20px;
+  padding-inline-end: 40px;
+}
+.mogeta2-5 {
+  padding-right: 40px;
+  padding: 16px;
+}
+.mogeta2-6 {
+  padding-inline-end: 40px;
+  padding: 16px;
+}
+.mogeta2-7 {
+  padding-left: 20px;
+  padding-right: 40px;
+  padding: 16px;
+}
+.mogeta2-8 {
+  padding-inline-start: 20px;
+  padding-inline-end: 40px;
+  padding: 16px;
+}
+
 /* ---- セレクタの出現順の警告 ---- */
 /* .mogeta2-1 と .mogeta2-1--moge-ta は同じ Element に当たるスタイルとする */
-.mogeta2-1--moge-ta {
+.mogeta3-1--moge-ta {
   color: blue;
 }
-.mogeta2-1-other {
+.mogeta3-1-other {
   color: red;
 }
-.mogeta2-1 {
+.mogeta3-1 {
   color: red;
 }
 
@@ -247,12 +285,24 @@ input[type="email"] {
 
 /* ---- 出現順テスト: パターン2（削除後に順序維持） ---- */
 /* new では .order-p2-beta が削除されるが、残りの相対順序は変わらない → 警告なし */
-.order-p2-alpha { padding: 8px; }
-.order-p2-beta  { padding: 12px; }
-.order-p2-gamma { padding: 16px; }
-.order-p2-delta { padding: 24px; }
+.order-p2-alpha {
+  padding: 8px;
+}
+.order-p2-beta {
+  padding: 12px;
+}
+.order-p2-gamma {
+  padding: 16px;
+}
+.order-p2-delta {
+  padding: 24px;
+}
 
 /* ---- 出現順テスト: パターン3（挿入） ---- */
 /* new では .order-p3-beta が途中に追加されるが、既存セレクタの相対順序は変わらない → 警告なし */
-.order-p3-alpha { margin: 0; }
-.order-p3-gamma { margin: 16px; }
+.order-p3-alpha {
+  margin: 0;
+}
+.order-p3-gamma {
+  margin: 16px;
+}
