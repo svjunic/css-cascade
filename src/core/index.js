@@ -33,21 +33,28 @@ export function applyShorthandRisksToDiff(diffResult, shorthandRisks) {
       if (!sel) continue
 
       let addedChanges = 0
-      for (const { longhand, oldWinner, newWinner, longhandValue, shorthandValue } of conflicts) {
+      for (const {
+        longhand, oldWinner, newWinner,
+        longhandValue, shorthandValue,
+        oldShorthandValue, oldLonghandValue,
+        oldShorthandImportant, oldLonghandImportant,
+        shorthandImportant, longhandImportant,
+      } of conflicts) {
         if (oldWinner === newWinner) continue
-        const oldEffective = oldWinner === 'longhand' ? longhandValue : shorthandValue
-        const newEffective = newWinner === 'longhand' ? longhandValue : shorthandValue
-        if (oldEffective === newEffective) continue
+        const oldEffective = oldWinner === 'longhand' ? oldLonghandValue : oldShorthandValue
+        const newEffective = newWinner === 'longhand' ? longhandValue    : shorthandValue
 
         const propEntry = sel.props.get(longhand)
         if (!propEntry || propEntry.status !== 'unchanged') continue
 
+        const oldImportant = oldWinner === 'longhand' ? oldLonghandImportant : oldShorthandImportant
+        const newImportant = newWinner === 'longhand' ? longhandImportant    : shorthandImportant
         sel.props.set(longhand, {
           status: 'changed',
           oldValue: oldEffective,
-          oldImportant: propEntry.important,
+          oldImportant,
           newValue: newEffective,
-          newImportant: propEntry.important,
+          newImportant,
         })
         addedChanges++
       }

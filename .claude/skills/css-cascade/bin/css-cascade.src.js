@@ -116,9 +116,10 @@ try {
   if (values['order-risk']) {
     orderRisks = computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
   }
-  // 常時計算して diff にマージ（--shorthand-risk フラグは raw 出力の有無のみ制御）
-  shorthandRisks = computeShorthandRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
-  applyShorthandRisksToDiff(result, shorthandRisks)
+  if (values['shorthand-risk']) {
+    shorthandRisks = computeShorthandRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+    applyShorthandRisksToDiff(result, shorthandRisks)
+  }
 } catch (err) {
   console.error(`Parse error: ${err.message}`)
   process.exit(2)

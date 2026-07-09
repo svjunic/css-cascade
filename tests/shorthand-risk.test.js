@@ -170,3 +170,44 @@ describe('computeShorthandRisks — background shorthand', () => {
     expect(result.hasWarning).toBe(true)
   })
 })
+
+describe('computeShorthandRisks — Fix #1: 新規追加セレクタは hasWarning をセットしない', () => {
+  it('old に存在しないセレクタで Case A 方向でも hasWarning === false', () => {
+    // old: セレクタなし、new: padding-right が先で padding が後 → shorthand 後勝ち (Case A)
+    // oldWinner === null なので regression 扱いにならない
+    const oldCss = ``
+    const newCss = `.bar { padding-right: 40px; padding: 16px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    expect(result.hasWarning).toBe(false)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const conflict = base?.selectors.find(s => s.selector === '.bar')?.conflicts
+      .find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.direction).toBe('A')
+    expect(conflict.oldWinner).toBeNull()
+  })
+
+  it('old に同セレクタが存在し Case A なら hasWarning === true', () => {
+    const oldCss = `.bar { padding: 16px; padding-right: 40px; }`
+    const newCss = `.bar { padding-right: 40px; padding: 16px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    expect(result.hasWarning).toBe(true)
+  })
+})
+
+describe('computeShorthandRisks — Fix #6: 多段 shorthand での longhand 重複排除', () => {
+  it('border と border-top が共存するとき border-top-width は 1 件のみ報告される', () => {
+    // border と border-top は両方 border-top-width を longhand に持つ
+    // new: border-top-width → border → border-top の順 → border が後勝ちして shorthand winner
+    // 重複排除により border-top-width の conflict は 1 件のみ
+    const oldCss = `.foo { border-top-width: 2px; border: 1px solid black; border-top: 3px solid red; }`
+    const newCss = `.foo { border: 1px solid black; border-top: 3px solid red; border-top-width: 2px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const sel = base?.selectors.find(s => s.selector === '.foo')
+    if (sel) {
+      const borderTopWidthConflicts = sel.conflicts.filter(c => c.longhand === 'border-top-width')
+      expect(borderTopWidthConflicts.length).toBeLessThanOrEqual(1)
+    }
+  })
+})

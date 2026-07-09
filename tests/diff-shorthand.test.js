@@ -130,3 +130,71 @@ describe('applyShorthandRisksToDiff — 既存の changed は上書きしない'
     expect(prop?.newValue).toBe('99px')
   })
 })
+
+describe('applyShorthandRisksToDiff — Fix #3: oldValue は old CSS の実効値を参照する', () => {
+  it('old shorthand 値と new shorthand 値が異なる場合、oldValue が old の shorthand 値になる', () => {
+    // old: padding-right → padding:8px → shorthand 後勝ち (8px)
+    // new: padding-right → padding:16px → shorthand 後勝ち (16px)
+    // → winner は両方 shorthand で同一 → conflict なし
+    // 別ケース: old shorthand が先で new shorthand が後
+    // old: padding:8px, padding-right:40px が後 → longhand 有効 (40px)
+    // new: padding-right:40px, padding:20px が後 → shorthand 後勝ち (20px)
+    // oldWinner=longhand, newWinner=shorthand (A) → oldValue=40px (old の longhand 値), newValue=20px
+    const oldCss = `.foo { padding: 8px; padding-right: 40px; }`
+    const newCss = `.foo { padding-right: 40px; padding: 20px; }`
+    const prop = applyAndGetProp(oldCss, newCss, '.foo', 'padding-right')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('40px')
+    expect(prop?.newValue).toBe('20px')
+  })
+
+  it('old shorthand 値が old の実効値として使われる（shorthand が old で後勝ち）', () => {
+    // old: padding-right:40px → padding:8px → shorthand 後勝ち (8px)
+    // new: padding:8px → padding-right:40px → longhand 後勝ち (40px)
+    // oldWinner=shorthand, newWinner=longhand (B) → oldValue=8px (old shorthand), newValue=40px
+    const oldCss = `.foo { padding-right: 40px; padding: 8px; }`
+    const newCss = `.foo { padding: 8px; padding-right: 40px; }`
+    const prop = applyAndGetProp(oldCss, newCss, '.foo', 'padding-right')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('8px')
+    expect(prop?.newValue).toBe('40px')
+  })
+})
+
+describe('applyShorthandRisksToDiff — Fix #2: ガード削除で winner 変化を正確に昇格する', () => {
+  it('padding shorthand 値が同じでも winner 変化があれば changed に昇格する', () => {
+    // old: padding:16px → padding-right:16px → longhand 後勝ち (同値だが longhand が有効)
+    // new: padding-right:16px → padding:16px → shorthand 後勝ち (同値だが shorthand が有効)
+    // oldEffective === newEffective (どちらも 16px) だがガードを削除したので昇格する
+    const oldCss = `.foo { padding: 16px; padding-right: 16px; }`
+    const newCss = `.foo { padding-right: 16px; padding: 16px; }`
+    const prop = applyAndGetProp(oldCss, newCss, '.foo', 'padding-right')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('16px')
+    expect(prop?.newValue).toBe('16px')
+  })
+})
+
+describe('applyShorthandRisksToDiff — Fix #5: important フラグが正しく設定される', () => {
+  it('new で shorthand が !important → newImportant === true', () => {
+    // old: padding:16px → padding-right:40px → longhand 後勝ち
+    // new: padding-right:40px → padding:16px !important → !important により shorthand が勝つ
+    const oldCss = `.foo { padding: 16px; padding-right: 40px; }`
+    const newCss = `.foo { padding-right: 40px; padding: 16px !important; }`
+    const prop = applyAndGetProp(oldCss, newCss, '.foo', 'padding-right')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.newImportant).toBe(true)
+    expect(prop?.oldImportant).toBe(false)
+  })
+
+  it('old で shorthand が !important → oldImportant === true', () => {
+    // old: padding-right:40px → padding:16px !important → shorthand が勝つ (important)
+    // new: padding:16px → padding-right:40px → longhand 後勝ち
+    const oldCss = `.foo { padding-right: 40px; padding: 16px !important; }`
+    const newCss = `.foo { padding: 16px; padding-right: 40px; }`
+    const prop = applyAndGetProp(oldCss, newCss, '.foo', 'padding-right')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldImportant).toBe(true)
+    expect(prop?.newImportant).toBe(false)
+  })
+})

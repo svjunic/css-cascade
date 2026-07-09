@@ -132,6 +132,7 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
       const oldDecls = oldBySel.get(selector) ?? []
       const conflicts = []
 
+      const reportedLonghands = new Set()
       for (const [shorthand, longhands] of SHORTHAND_MAP) {
         const newHasShorthand = newDecls.some(d => d.prop === shorthand)
         if (!newHasShorthand) continue
@@ -139,6 +140,8 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
         for (const longhand of longhands) {
           const newHasLonghand = newDecls.some(d => d.prop === longhand)
           if (!newHasLonghand) continue
+
+          if (reportedLonghands.has(longhand)) continue
 
           const oldWinner = getIntraWinner(oldDecls, shorthand, longhand)
           const newWinner = getIntraWinner(newDecls, shorthand, longhand)
@@ -148,35 +151,39 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
           let direction
           if (newWinner === 'shorthand') {
             direction = 'A'
-            hasWarning = true
+            if (oldWinner !== null) hasWarning = true
           } else {
             direction = 'B'
           }
 
-          // 表示用の値: layerRank が最も高い宣言（同順なら最後の宣言）の value を使う
-          const bestShorthandDecl = newDecls.reduce((best, d) => {
-            if (d.prop !== shorthand) return best
-            if (!best) return d
-            if (d.layerRank > best.layerRank) return d
-            if (d.layerRank === best.layerRank && d.idx > best.idx) return d
-            return best
-          }, null)
-          const bestLonghandDecl = newDecls.reduce((best, d) => {
-            if (d.prop !== longhand) return best
+          const bestDecl = (decls, prop) => decls.reduce((best, d) => {
+            if (d.prop !== prop) return best
             if (!best) return d
             if (d.layerRank > best.layerRank) return d
             if (d.layerRank === best.layerRank && d.idx > best.idx) return d
             return best
           }, null)
 
+          const bestShorthandDecl    = bestDecl(newDecls, shorthand)
+          const bestLonghandDecl     = bestDecl(newDecls, longhand)
+          const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
+          const oldBestLonghandDecl  = bestDecl(oldDecls, longhand)
+
+          reportedLonghands.add(longhand)
           conflicts.push({
             shorthand,
             longhand,
             oldWinner,
             newWinner,
             direction,
-            longhandValue: bestLonghandDecl?.value ?? null,
-            shorthandValue: bestShorthandDecl?.value ?? null,
+            oldShorthandValue:    oldBestShorthandDecl?.value    ?? null,
+            oldLonghandValue:     oldBestLonghandDecl?.value     ?? null,
+            longhandValue:        bestLonghandDecl?.value        ?? null,
+            shorthandValue:       bestShorthandDecl?.value       ?? null,
+            oldShorthandImportant: oldBestShorthandDecl?.important ?? false,
+            oldLonghandImportant:  oldBestLonghandDecl?.important  ?? false,
+            shorthandImportant:    bestShorthandDecl?.important    ?? false,
+            longhandImportant:     bestLonghandDecl?.important     ?? false,
           })
         }
       }
