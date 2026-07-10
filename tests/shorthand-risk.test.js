@@ -171,14 +171,14 @@ describe('computeShorthandRisks — background shorthand', () => {
   })
 })
 
-describe('computeShorthandRisks — Fix #1: 新規追加セレクタは hasWarning をセットしない', () => {
-  it('old に存在しないセレクタで Case A 方向でも hasWarning === false', () => {
+describe('computeShorthandRisks — Finding 2: Case A は oldWinner に関わらず hasWarning === true', () => {
+  it('old に存在しないセレクタで Case A 方向でも hasWarning === true', () => {
     // old: セレクタなし、new: padding-right が先で padding が後 → shorthand 後勝ち (Case A)
-    // oldWinner === null なので regression 扱いにならない
+    // oldWinner === null でも Case A は警告対象
     const oldCss = ``
     const newCss = `.bar { padding-right: 40px; padding: 16px; }`
     const result = computeShorthandRisks(oldCss, newCss)
-    expect(result.hasWarning).toBe(false)
+    expect(result.hasWarning).toBe(true)
     const base = result.risks.find(r => r.contextKey === 'base')
     const conflict = base?.selectors.find(s => s.selector === '.bar')?.conflicts
       .find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
@@ -187,11 +187,39 @@ describe('computeShorthandRisks — Fix #1: 新規追加セレクタは hasWarni
     expect(conflict.oldWinner).toBeNull()
   })
 
+  it('old に存在しないセレクタで Case B 方向なら hasWarning === false', () => {
+    // old: セレクタなし、new: padding が先で padding-right が後 → longhand 後勝ち (Case B)
+    const oldCss = ``
+    const newCss = `.bar { padding: 16px; padding-right: 40px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    expect(result.hasWarning).toBe(false)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const conflict = base?.selectors.find(s => s.selector === '.bar')?.conflicts
+      .find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.direction).toBe('B')
+    expect(conflict.oldWinner).toBeNull()
+  })
+
   it('old に同セレクタが存在し Case A なら hasWarning === true', () => {
     const oldCss = `.bar { padding: 16px; padding-right: 40px; }`
     const newCss = `.bar { padding-right: 40px; padding: 16px; }`
     const result = computeShorthandRisks(oldCss, newCss)
     expect(result.hasWarning).toBe(true)
+  })
+})
+
+describe('computeShorthandRisks — Finding 5: 新規セレクタで direction=B のとき oldWinner は null', () => {
+  it('old に存在しないセレクタで Case B のとき oldWinner === null・direction === B を返す', () => {
+    const oldCss = ``
+    const newCss = `.bar { padding: 16px; padding-right: 40px; }`
+    const result = computeShorthandRisks(oldCss, newCss)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const conflict = base?.selectors.find(s => s.selector === '.bar')?.conflicts
+      .find(c => c.shorthand === 'padding' && c.longhand === 'padding-right')
+    expect(conflict).toBeDefined()
+    expect(conflict.direction).toBe('B')
+    expect(conflict.oldWinner).toBeNull()
   })
 })
 

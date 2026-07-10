@@ -108,16 +108,18 @@ let orderRisks = []
 let shorthandRisks = { hasWarning: false, risks: [] }
 try {
   const parseOptions = { semanticSelectors: values['semantic-selectors'] }
+  const parsedOld = parseCss(oldCss, parseOptions)
+  const parsedNew = parseCss(newCss, parseOptions)
   result = diff(
-    resolve(parseCss(oldCss, parseOptions)),
-    resolve(parseCss(newCss, parseOptions)),
+    resolve(parsedOld),
+    resolve(parsedNew),
     { ignoreCosmetic: values['ignore-cosmetic'] },
   )
   if (values['order-risk']) {
     orderRisks = computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
   }
   if (values['shorthand-risk']) {
-    shorthandRisks = computeShorthandRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+    shorthandRisks = computeShorthandRisks(parsedOld, parsedNew, { semanticSelectors: values['semantic-selectors'] })
     applyShorthandRisksToDiff(result, shorthandRisks)
   }
 } catch (err) {
@@ -269,11 +271,13 @@ if (values.format === 'json') {
       for (const { selector, conflicts } of selectors) {
         console.log(`  ${c.dim}${selector}${c.reset}`)
         for (const conflict of conflicts) {
-          const { shorthand, longhand, direction, longhandValue, shorthandValue, oldLonghandValue, oldShorthandValue } = conflict
+          const { shorthand, longhand, direction, oldWinner, longhandValue, shorthandValue, oldLonghandValue, oldShorthandValue } = conflict
           if (direction === 'A') {
-            console.log(`    ${c.yellow}⚠ ${longhand}: shorthand に上書きされた（旧: ${longhand}:${oldLonghandValue} が有効 → 新: ${shorthand}:${shorthandValue} に上書き）${c.reset}`)
+            console.log(`    ${c.yellow}⚠ ${longhand}: shorthand に上書きされた（旧: ${longhand}:${oldLonghandValue ?? ''} が有効 → 新: ${shorthand}:${shorthandValue ?? ''} に上書き）${c.reset}`)
+          } else if (oldWinner === null) {
+            console.log(`    ${c.green}↗ ${longhand}: 新規（longhand が有効: ${longhand}:${longhandValue ?? ''}）${c.reset}`)
           } else {
-            console.log(`    ${c.green}↗ ${longhand}: shorthand 上書き解消（旧: ${shorthand}:${oldShorthandValue} に上書き → 新: ${longhand}:${longhandValue} が有効）${c.reset}`)
+            console.log(`    ${c.green}↗ ${longhand}: shorthand 上書き解消（旧: ${shorthand}:${oldShorthandValue ?? ''} に上書き → 新: ${longhand}:${longhandValue ?? ''} が有効）${c.reset}`)
           }
         }
       }

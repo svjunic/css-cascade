@@ -120,8 +120,8 @@ function bestDecl(decls, prop) {
 
 export function computeShorthandRisks(oldCss, newCss, options = {}) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
-  const parsedOld = parseCss(oldCss, parseOpts)
-  const parsedNew = parseCss(newCss, parseOpts)
+  const parsedOld = oldCss instanceof Map ? oldCss : parseCss(oldCss, parseOpts)
+  const parsedNew = newCss instanceof Map ? newCss : parseCss(newCss, parseOpts)
 
   const allContexts = new Set([...parsedOld.keys(), ...parsedNew.keys()])
   const sortedContexts = ['base', ...[...allContexts].filter(k => k !== 'base').sort()]
@@ -164,7 +164,7 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
           let direction
           if (newWinner === 'shorthand') {
             direction = 'A'
-            if (oldWinner !== null) hasWarning = true
+            hasWarning = true
           } else {
             direction = 'B'
           }
