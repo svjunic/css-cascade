@@ -173,14 +173,16 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   }
 }
 
-export async function computeOrderRisks(oldCss, newCss, options = {}) {
+export async function computeOrderRisks(oldCss, newCss, options = {}, parser = null) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
+  const _parseCss = parser?.parseCss ?? parseCss
+  const _parseSelectorOrder = parser?.parseSelectorOrder ?? parseSelectorOrder
 
   const [oldOrder, newOrder, parsedOld, parsedNew] = await Promise.all([
-    parseSelectorOrder(oldCss, parseOpts),
-    parseSelectorOrder(newCss, parseOpts),
-    parseCss(oldCss, parseOpts),
-    parseCss(newCss, parseOpts),
+    _parseSelectorOrder(oldCss, parseOpts),
+    _parseSelectorOrder(newCss, parseOpts),
+    _parseCss(oldCss, parseOpts),
+    _parseCss(newCss, parseOpts),
   ])
   const resolvedOld = resolve(parsedOld)
   const resolvedNew = resolve(parsedNew)

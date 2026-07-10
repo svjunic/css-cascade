@@ -4,7 +4,7 @@
 
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { parseCss, closeBrowser } from '../src/core/parse-node.js'
+import { parseCss, parseSelectorOrder, closeBrowser } from '../src/core/parse-node.js'
 import { resolve } from '../src/core/resolve.js'
 import { diff } from '../src/core/diff.js'
 import { computeOrderRisks } from '../src/core/order-risk.js'
@@ -119,7 +119,7 @@ async function main() {
       { ignoreCosmetic: values['ignore-cosmetic'] },
     )
     if (values['order-risk']) {
-      orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+      orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] }, { parseCss, parseSelectorOrder })
     }
     if (values['shorthand-risk']) {
       // shorthand-risk は PostCSS ベースのパーサーを使うため CSS 文字列を渡す
