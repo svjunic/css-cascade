@@ -4,7 +4,7 @@
 
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { parseCss } from '../src/core/parse.js'
+import { parseCss, closeBrowser } from '../src/core/parse-node.js'
 import { resolve } from '../src/core/resolve.js'
 import { diff } from '../src/core/diff.js'
 import { computeOrderRisks } from '../src/core/order-risk.js'
@@ -103,29 +103,34 @@ const [oldPath, newPath] = positionals
 const oldCss = readFile(oldPath)
 const newCss = readFile(newPath)
 
-let result
-let orderRisks = []
-let shorthandRisks = { hasWarning: false, risks: [] }
-try {
-  const parseOptions = { semanticSelectors: values['semantic-selectors'] }
-  const parsedOld = parseCss(oldCss, parseOptions)
-  const parsedNew = parseCss(newCss, parseOptions)
-  result = diff(
-    resolve(parsedOld),
-    resolve(parsedNew),
-    { ignoreCosmetic: values['ignore-cosmetic'] },
-  )
-  if (values['order-risk']) {
-    orderRisks = computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+async function main() {
+  let result
+  let orderRisks = []
+  let shorthandRisks = { hasWarning: false, risks: [] }
+  try {
+    const parseOptions = { semanticSelectors: values['semantic-selectors'] }
+    const [parsedOld, parsedNew] = await Promise.all([
+      parseCss(oldCss, parseOptions),
+      parseCss(newCss, parseOptions),
+    ])
+    result = diff(
+      resolve(parsedOld),
+      resolve(parsedNew),
+      { ignoreCosmetic: values['ignore-cosmetic'] },
+    )
+    if (values['order-risk']) {
+      orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+    }
+    if (values['shorthand-risk']) {
+      // shorthand-risk は PostCSS ベースのパーサーを使うため CSS 文字列を渡す
+      shorthandRisks = await computeShorthandRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+      applyShorthandRisksToDiff(result, shorthandRisks)
+    }
+  } catch (err) {
+    await closeBrowser().catch(() => {})
+    console.error(`Parse error: ${err.message}`)
+    process.exit(2)
   }
-  if (values['shorthand-risk']) {
-    shorthandRisks = computeShorthandRisks(parsedOld, parsedNew, { semanticSelectors: values['semantic-selectors'] })
-    applyShorthandRisksToDiff(result, shorthandRisks)
-  }
-} catch (err) {
-  console.error(`Parse error: ${err.message}`)
-  process.exit(2)
-}
 
 // filter: 'changed' は added+removed+changed をすべて含む（「差分あり」の意）
 function shouldInclude(status, filter) {
@@ -158,6 +163,7 @@ const filter = values.filter
 if (values.format === 'html') {
   const html = generateHtmlReport(result, values['order-risk'] ? orderRisks : null, values['shorthand-risk'] ? shorthandRisks : null)
   process.stdout.write(html)
+  await closeBrowser()
   process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
 }
 
@@ -285,4 +291,8 @@ if (values.format === 'json') {
   }
 }
 
-process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
+  await closeBrowser()
+  process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
+}
+
+main()

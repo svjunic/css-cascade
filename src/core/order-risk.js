@@ -1,4 +1,4 @@
-import { parseCss, parseSelectorOrder } from './parse.js'
+import { parseCss, parseSelectorOrder } from './parse-cssom.js'
 import { resolve } from './resolve.js'
 import { sameSpecificity, computeSpecificity, compareSpecificity } from './specificity.js'
 
@@ -173,13 +173,17 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   }
 }
 
-export function computeOrderRisks(oldCss, newCss, options = {}) {
+export async function computeOrderRisks(oldCss, newCss, options = {}) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
 
-  const oldOrder = parseSelectorOrder(oldCss, parseOpts)
-  const newOrder = parseSelectorOrder(newCss, parseOpts)
-  const resolvedOld = resolve(parseCss(oldCss, parseOpts))
-  const resolvedNew = resolve(parseCss(newCss, parseOpts))
+  const [oldOrder, newOrder, parsedOld, parsedNew] = await Promise.all([
+    parseSelectorOrder(oldCss, parseOpts),
+    parseSelectorOrder(newCss, parseOpts),
+    parseCss(oldCss, parseOpts),
+    parseCss(newCss, parseOpts),
+  ])
+  const resolvedOld = resolve(parsedOld)
+  const resolvedNew = resolve(parsedNew)
 
   const allContexts = new Set([...oldOrder.keys(), ...newOrder.keys()])
   const sortedContexts = ['base', ...[...allContexts].filter(k => k !== 'base').sort()]

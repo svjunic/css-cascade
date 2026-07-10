@@ -1,4 +1,7 @@
-import { parseCss } from './parse.js'
+// ショートハンドリスク検出は CSSOM の inter-rule 宣言順序情報を利用する。
+// 同一ルール内のショートハンド/ロングハンドは CSSOM が合成するため、
+// inter-rule CSS（複数の {} ブロック）でのみ正確に検出できる。
+import { parseCss } from './parse-cssom.js'
 
 const SHORTHAND_MAP = new Map([
   ['padding',         ['padding-top', 'padding-right', 'padding-bottom', 'padding-left',
@@ -118,10 +121,10 @@ function bestDecl(decls, prop) {
   }, null)
 }
 
-export function computeShorthandRisks(oldCss, newCss, options = {}) {
+export async function computeShorthandRisks(oldCss, newCss, options = {}) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
-  const parsedOld = oldCss instanceof Map ? oldCss : parseCss(oldCss, parseOpts)
-  const parsedNew = newCss instanceof Map ? newCss : parseCss(newCss, parseOpts)
+  const parsedOld = typeof oldCss === 'string' ? await parseCss(oldCss, parseOpts) : oldCss
+  const parsedNew = typeof newCss === 'string' ? await parseCss(newCss, parseOpts) : newCss
 
   const allContexts = new Set([...parsedOld.keys(), ...parsedNew.keys()])
   const sortedContexts = ['base', ...[...allContexts].filter(k => k !== 'base').sort()]

@@ -4,7 +4,7 @@
  * 状態管理・イベント結線・描画の調整を担う。
  */
 
-import { parseCss } from '../core/parse.js'
+import { parseCss } from '../core/parse-cssom.js'
 import { resolve } from '../core/resolve.js'
 import { diff } from '../core/diff.js'
 import { computeOrderRisks } from '../core/order-risk.js'
@@ -51,17 +51,19 @@ const optSemanticSelectorsEl = document.getElementById('opt-semantic-selectors')
 
 // ─── コア処理 ─────────────────────────────────────────────────────────────
 
-function runDiff() {
+async function runDiff() {
   if (!state.oldCss || !state.newCss) return
 
   const parseOpts = { semanticSelectors: state.semanticSelectors }
   try {
-    const parsedOld = parseCss(state.oldCss, parseOpts)
-    const parsedNew = parseCss(state.newCss, parseOpts)
+    const [parsedOld, parsedNew] = await Promise.all([
+      parseCss(state.oldCss, parseOpts),
+      parseCss(state.newCss, parseOpts),
+    ])
     const resolvedOld = resolve(parsedOld)
     const resolvedNew = resolve(parsedNew)
     state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
-    state.orderRisks = computeOrderRisks(state.oldCss, state.newCss, parseOpts)
+    state.orderRisks = await computeOrderRisks(state.oldCss, state.newCss, parseOpts)
     state.parseError = null
   } catch (err) {
     // CSS パースエラー: 例外を握りつぶさずユーザーに表示する
@@ -283,7 +285,7 @@ initDropzone(oldDropEl, (text, fileName) => {
     fileName,
     lineCount: text.split('\n').length,
   })
-  runDiff()
+  runDiff() // intentional fire-and-forget
 })
 
 initDropzone(newDropEl, (text, fileName) => {
@@ -293,7 +295,7 @@ initDropzone(newDropEl, (text, fileName) => {
     fileName,
     lineCount: text.split('\n').length,
   })
-  runDiff()
+  runDiff() // intentional fire-and-forget
 })
 
 // 検索
@@ -315,12 +317,12 @@ filterBtnsEl.querySelectorAll('[data-filter]').forEach(btn => {
 // オプション チェックボックス
 optIgnoreCosmeticEl?.addEventListener('change', () => {
   state.ignoreCosmetic = optIgnoreCosmeticEl.checked
-  runDiff()
+  runDiff() // intentional fire-and-forget
 })
 
 optSemanticSelectorsEl?.addEventListener('change', () => {
   state.semanticSelectors = optSemanticSelectorsEl.checked
-  runDiff()
+  runDiff() // intentional fire-and-forget
 })
 
 // ─── 初期ロード ───────────────────────────────────────────────────────────
@@ -349,7 +351,7 @@ async function loadInitialFiles() {
         lineCount: newText.split('\n').length,
       })
 
-      runDiff()
+      await runDiff()
     }
   } catch {
     // 初期ファイルが取得できない場合は無視
