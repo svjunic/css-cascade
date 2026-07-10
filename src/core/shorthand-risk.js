@@ -46,10 +46,7 @@ const SHORTHAND_MAP = new Map([
   ['animation',       ['animation-name', 'animation-duration', 'animation-timing-function',
                        'animation-delay', 'animation-iteration-count', 'animation-direction',
                        'animation-fill-mode', 'animation-play-state']],
-  ['inset',           ['top', 'right', 'bottom', 'left',
-                       'inset-inline-start', 'inset-inline-end',
-                       'inset-block-start', 'inset-block-end',
-                       'inset-inline', 'inset-block']],
+  ['inset',           ['top', 'right', 'bottom', 'left']],
   ['inset-inline',    ['inset-inline-start', 'inset-inline-end']],
   ['inset-block',     ['inset-block-start', 'inset-block-end']],
   ['padding-inline',  ['padding-inline-start', 'padding-inline-end']],
@@ -146,53 +143,48 @@ export async function computeShorthandRisks(oldCss, newCss, options = {}, parser
       const oldDecls = oldBySel.get(selector) ?? []
       const conflicts = []
 
-      const reportedLonghands = new Set()
+      // Pass 1: longhand ごとに new CSS での支配的 shorthand（最も source-index が高いもの）を特定
+      const longhandDominant = new Map()
       for (const [shorthand, longhands] of SHORTHAND_MAP) {
-        const newHasShorthand = newDecls.some(d => d.prop === shorthand)
-        if (!newHasShorthand) continue
-
-        const bestShorthandDecl    = bestDecl(newDecls, shorthand)
-        const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
-
+        const bsd = bestDecl(newDecls, shorthand)
+        if (!bsd) continue
         for (const longhand of longhands) {
-          const newHasLonghand = newDecls.some(d => d.prop === longhand)
-          if (!newHasLonghand) continue
-
-          if (reportedLonghands.has(longhand)) continue
-
-          const oldWinner = getIntraWinner(oldDecls, shorthand, longhand)
-          const newWinner = getIntraWinner(newDecls, shorthand, longhand)
-
-          if (oldWinner === newWinner) continue
-
-          let direction
-          if (newWinner === 'shorthand') {
-            direction = 'A'
-            hasWarning = true
-          } else {
-            direction = 'B'
+          if (!newDecls.some(d => d.prop === longhand)) continue
+          const existing = longhandDominant.get(longhand)
+          if (!existing ||
+              bsd.layerRank > existing.bestShorthandDecl.layerRank ||
+              (bsd.layerRank === existing.bestShorthandDecl.layerRank &&
+               bsd.idx > existing.bestShorthandDecl.idx)) {
+            longhandDominant.set(longhand, { shorthand, bestShorthandDecl: bsd })
           }
-
-          const bestLonghandDecl     = bestDecl(newDecls, longhand)
-          const oldBestLonghandDecl  = bestDecl(oldDecls, longhand)
-
-          reportedLonghands.add(longhand)
-          conflicts.push({
-            shorthand,
-            longhand,
-            oldWinner,
-            newWinner,
-            direction,
-            oldShorthandValue:    oldBestShorthandDecl?.value    ?? null,
-            oldLonghandValue:     oldBestLonghandDecl?.value     ?? null,
-            longhandValue:        bestLonghandDecl?.value        ?? null,
-            shorthandValue:       bestShorthandDecl?.value       ?? null,
-            oldShorthandImportant: oldBestShorthandDecl?.important ?? false,
-            oldLonghandImportant:  oldBestLonghandDecl?.important  ?? false,
-            shorthandImportant:    bestShorthandDecl?.important    ?? false,
-            longhandImportant:     bestLonghandDecl?.important     ?? false,
-          })
         }
+      }
+
+      // Pass 2: 支配的 shorthand との勝敗を old/new で比較し競合を報告
+      for (const [longhand, { shorthand, bestShorthandDecl }] of longhandDominant) {
+        const oldWinner = getIntraWinner(oldDecls, shorthand, longhand)
+        const newWinner = getIntraWinner(newDecls, shorthand, longhand)
+
+        if (oldWinner === newWinner) continue
+
+        const direction = newWinner === 'shorthand' ? 'A' : 'B'
+        if (direction === 'A') hasWarning = true
+
+        const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
+        const bestLonghandDecl     = bestDecl(newDecls, longhand)
+        const oldBestLonghandDecl  = bestDecl(oldDecls, longhand)
+
+        conflicts.push({
+          shorthand, longhand, oldWinner, newWinner, direction,
+          oldShorthandValue:     oldBestShorthandDecl?.value    ?? null,
+          oldLonghandValue:      oldBestLonghandDecl?.value     ?? null,
+          longhandValue:         bestLonghandDecl?.value        ?? null,
+          shorthandValue:        bestShorthandDecl?.value       ?? null,
+          oldShorthandImportant: oldBestShorthandDecl?.important ?? false,
+          oldLonghandImportant:  oldBestLonghandDecl?.important  ?? false,
+          shorthandImportant:    bestShorthandDecl?.important    ?? false,
+          longhandImportant:     bestLonghandDecl?.important     ?? false,
+        })
       }
 
       if (conflicts.length > 0) {

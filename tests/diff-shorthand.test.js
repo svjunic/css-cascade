@@ -286,3 +286,39 @@ describe('applyShorthandRisksToDiff — Finding 7: ctx.status は added/removed 
     expect(ctx.status).toBe('added')
   })
 })
+
+describe('Fix #1: splitTokens — calc() 内スペースを区切らない', () => {
+  it('padding: calc(10px + 2em) 20px 30px 40px で padding-right === 20px', async () => {
+    const oldCss = `.foo { padding: calc(10px + 2em) 20px 30px 40px; } .foo { padding-right: 99px; }`
+    const newCss = `.foo { padding-right: 99px; } .foo { padding: calc(10px + 2em) 20px 30px 40px; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'padding-right')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.newValue).toBe('20px')
+  })
+
+  it('gap: calc(var(--x) + 4px) 16px で row-gap === calc(var(--x) + 4px)', async () => {
+    const oldCss = `.foo { gap: calc(var(--x) + 4px) 16px; } .foo { row-gap: 99px; }`
+    const newCss = `.foo { row-gap: 99px; } .foo { gap: calc(var(--x) + 4px) 16px; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'row-gap')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.newValue).toBe('calc(var(--x) + 4px)')
+  })
+})
+
+describe('Fix #5: border/flex/flex-flow shorthand 展開', () => {
+  it('border-top: 3px solid red で border-top-width === 3px', async () => {
+    const oldCss = `.foo { border-top: 3px solid red; } .foo { border-top-width: 1px; }`
+    const newCss = `.foo { border-top-width: 1px; } .foo { border-top: 3px solid red; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'border-top-width')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.newValue).toBe('3px')
+  })
+
+  it('flex: 1 1 auto で flex-basis === auto', async () => {
+    const oldCss = `.foo { flex: 1 1 auto; } .foo { flex-basis: 200px; }`
+    const newCss = `.foo { flex-basis: 200px; } .foo { flex: 1 1 auto; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'flex-basis')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.newValue).toBe('auto')
+  })
+})

@@ -300,3 +300,55 @@ describe('computeShorthandRisks — Fix #6: 多段 shorthand での longhand 重
     }
   })
 })
+
+describe('computeShorthandRisks — Fix #9: inset shorthand の論理プロパティ除去', () => {
+  it('inset と inset-inline-start が共存しても inset の shorthand 競合を検出しない', async () => {
+    // inset は物理4方向のみを設定するため inset-inline-start は inset の longhand ではない
+    const oldCss = `.foo { inset: 10px; } .foo { inset-inline-start: 20px; }`
+    const newCss = `.foo { inset-inline-start: 20px; } .foo { inset: 10px; }`
+    const result = await computeShorthandRisks(oldCss, newCss)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const sel = base?.selectors.find(s => s.selector === '.foo')
+    const insetConflict = sel?.conflicts.find(c => c.shorthand === 'inset' && c.longhand === 'inset-inline-start')
+    expect(insetConflict).toBeUndefined()
+  })
+
+  it('inset と top が共存する場合は競合を検出する', async () => {
+    const oldCss = `.foo { inset: 10px; } .foo { top: 20px; }`
+    const newCss = `.foo { top: 20px; } .foo { inset: 10px; }`
+    const result = await computeShorthandRisks(oldCss, newCss)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const sel = base?.selectors.find(s => s.selector === '.foo')
+    const insetConflict = sel?.conflicts.find(c => c.shorthand === 'inset' && c.longhand === 'top')
+    expect(insetConflict).toBeDefined()
+    expect(insetConflict.direction).toBe('A')
+  })
+})
+
+describe('computeShorthandRisks — Fix #3: 2パスアルゴリズム（支配的 shorthand を優先）', () => {
+  it('border-width が dominant → border-top-width の conflict は direction A', async () => {
+    // border: idx=0, border-top: idx=1, border-width: idx=2 → border-width が支配的
+    // old: border-top-width が後 → longhand 後勝ち
+    // new: border-top-width が前、border-width が後 → shorthand 後勝ち → direction A
+    const oldCss = `.foo { border: 2px solid red; } .foo { border-top: 3px solid red; } .foo { border-width: 5px; } .foo { border-top-width: 1px; }`
+    const newCss = `.foo { border: 2px solid red; } .foo { border-top: 3px solid red; } .foo { border-top-width: 1px; } .foo { border-width: 5px; }`
+    const result = await computeShorthandRisks(oldCss, newCss)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const sel = base?.selectors.find(s => s.selector === '.foo')
+    const conflict = sel?.conflicts.find(c => c.longhand === 'border-top-width')
+    expect(conflict).toBeDefined()
+    expect(conflict.direction).toBe('A')
+  })
+
+  it('同じ longhand の conflict は 1 件のみ（重複なし）', async () => {
+    const oldCss = `.foo { border-top-width: 2px; } .foo { border: 1px solid black; } .foo { border-top: 3px solid red; }`
+    const newCss = `.foo { border: 1px solid black; } .foo { border-top: 3px solid red; } .foo { border-top-width: 2px; }`
+    const result = await computeShorthandRisks(oldCss, newCss)
+    const base = result.risks.find(r => r.contextKey === 'base')
+    const sel = base?.selectors.find(s => s.selector === '.foo')
+    if (sel) {
+      const conflicts = sel.conflicts.filter(c => c.longhand === 'border-top-width')
+      expect(conflicts.length).toBe(1)
+    }
+  })
+})

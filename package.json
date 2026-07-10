@@ -28,7 +28,11 @@
     "LICENSE"
   ],
   "exports": {
-    ".": "./src/core/index.js"
+    ".": {
+      "browser": "./src/core/index.js",
+      "node": "./src/core/index.node.js",
+      "default": "./src/core/index.js"
+    }
   },
   "bin": {
     "css-cascade": "bin/css-cascade.cjs"
@@ -40,14 +44,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@svjunic/css-cascade": "^1.0.1"
+    "@svjunic/css-cascade": "^1.0.1",
+    "playwright": "^1.61.1"
   },
   "devDependencies": {
     "@vitest/browser": "^4.1.10",
     "@vitest/browser-playwright": "^4.1.10",
     "esbuild": "^0.28.1",
     "fzf": "^0.5.2",
-    "playwright": "^1.61.1",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
   },

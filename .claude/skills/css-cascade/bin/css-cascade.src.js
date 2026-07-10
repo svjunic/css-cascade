@@ -294,4 +294,8 @@ if (values.format === 'json') {
   process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
 }
 
-main()
+main().catch(async err => {
+  console.error(err.message || String(err))
+  try { await closeBrowser() } catch { /* ignore */ }
+  process.exit(1)
+})
