@@ -17,11 +17,18 @@ const BOX4_MAP = new Map([
 
 // 2値 shorthand の longhand: [first, second] 順
 const BOX2_MAP = new Map([
-  ['overflow',      ['overflow-x', 'overflow-y']],
-  ['gap',           ['row-gap', 'column-gap']],
-  ['place-items',   ['align-items', 'justify-items']],
-  ['place-content', ['align-content', 'justify-content']],
-  ['place-self',    ['align-self', 'justify-self']],
+  ['overflow',       ['overflow-x', 'overflow-y']],
+  ['gap',            ['row-gap', 'column-gap']],
+  ['place-items',    ['align-items', 'justify-items']],
+  ['place-content',  ['align-content', 'justify-content']],
+  ['place-self',     ['align-self', 'justify-self']],
+  // 論理プロパティ系 2値ショートハンド（writing-mode 非依存で展開可能）
+  ['padding-inline', ['padding-inline-start', 'padding-inline-end']],
+  ['padding-block',  ['padding-block-start', 'padding-block-end']],
+  ['margin-inline',  ['margin-inline-start', 'margin-inline-end']],
+  ['margin-block',   ['margin-block-start', 'margin-block-end']],
+  ['inset-inline',   ['inset-inline-start', 'inset-inline-end']],
+  ['inset-block',    ['inset-block-start', 'inset-block-end']],
 ])
 
 // マルチ値 shorthand の値を longhand 用のコンポーネント値に展開する。
@@ -50,6 +57,8 @@ function resolveShorthandComponent(shorthand, longhand, value) {
       return p.length === 1 ? p[0] : (p[idx] ?? p[0])
     }
   }
+  // 物理ショートハンド（padding/margin 等）→ 論理ロングハンド（padding-inline-start 等）は
+  // writing-mode 依存のため静的展開不可。フォールバックでショートハンド値全体を返す。
   return value
 }
 
@@ -97,18 +106,26 @@ export function applyShorthandRisksToDiff(diffResult, shorthandRisks) {
         // (undefined になる) ケースが多い。そのため undefined も昇格対象とする。
         if (propEntry && propEntry.status !== 'unchanged') continue
 
-        const oldEffective = oldWinner === 'longhand' ? oldLonghandValue : resolveShorthandComponent(shorthand, longhand, oldShorthandValue ?? '')
         const newEffective = newWinner === 'longhand' ? longhandValue    : resolveShorthandComponent(shorthand, longhand, shorthandValue ?? '')
-
-        const oldImportant = oldWinner === 'longhand' ? oldLonghandImportant : oldShorthandImportant
         const newImportant = newWinner === 'longhand' ? longhandImportant    : shorthandImportant
-        sel.props.set(longhand, {
-          status: 'changed',
-          oldValue: oldEffective,
-          oldImportant,
-          newValue: newEffective,
-          newImportant,
-        })
+
+        if (oldWinner === null) {
+          sel.props.set(longhand, {
+            status: 'added',
+            newValue: newEffective,
+            newImportant,
+          })
+        } else {
+          const oldEffective = oldWinner === 'longhand' ? oldLonghandValue : resolveShorthandComponent(shorthand, longhand, oldShorthandValue ?? '')
+          const oldImportant = oldWinner === 'longhand' ? oldLonghandImportant : oldShorthandImportant
+          sel.props.set(longhand, {
+            status: 'changed',
+            oldValue: oldEffective,
+            oldImportant,
+            newValue: newEffective,
+            newImportant,
+          })
+        }
         addedChanges++
       }
 

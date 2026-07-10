@@ -122,8 +122,7 @@ async function main() {
       orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] }, { parseCss, parseSelectorOrder })
     }
     if (values['shorthand-risk']) {
-      // shorthand-risk は PostCSS ベースのパーサーを使うため CSS 文字列を渡す
-      shorthandRisks = await computeShorthandRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+      shorthandRisks = await computeShorthandRisks(parsedOld, parsedNew, { semanticSelectors: values['semantic-selectors'] })
       applyShorthandRisksToDiff(result, shorthandRisks)
     }
   } catch (err) {

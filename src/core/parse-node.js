@@ -27,14 +27,19 @@ const _cssomSource = (() => {
 
 let _browser = null
 let _page = null
+let _pagePromise = null
 
 async function _getPage() {
-  if (_page) return _page
-  _browser = await chromium.launch({ headless: true })
-  const context = await _browser.newContext()
-  _page = await context.newPage()
-  await _page.addScriptTag({ content: _cssomSource })
-  return _page
+  if (!_pagePromise) {
+    _pagePromise = (async () => {
+      _browser = await chromium.launch({ headless: true })
+      const context = await _browser.newContext()
+      _page = await context.newPage()
+      await _page.addScriptTag({ content: _cssomSource })
+      return _page
+    })()
+  }
+  return _pagePromise
 }
 
 /**
@@ -46,6 +51,7 @@ export async function closeBrowser() {
     await _browser.close()
     _browser = null
     _page = null
+    _pagePromise = null
   }
 }
 
@@ -53,6 +59,13 @@ export async function closeBrowser() {
 process.on('exit', () => {
   if (_browser) _browser.close()
 })
+
+async function _cleanup() {
+  await closeBrowser()
+  process.exit(0)
+}
+process.once('SIGTERM', _cleanup)
+process.once('SIGINT', _cleanup)
 
 // ─── parseCss ─────────────────────────────────────────────────────────────────
 

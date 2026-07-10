@@ -51,10 +51,14 @@ const optSemanticSelectorsEl = document.getElementById('opt-semantic-selectors')
 
 // ─── コア処理 ─────────────────────────────────────────────────────────────
 
+let _diffGeneration = 0
+
 async function runDiff() {
   if (!state.oldCss || !state.newCss) return
+  const gen = ++_diffGeneration
 
   const parseOpts = { semanticSelectors: state.semanticSelectors }
+  let diffResult, orderRisks
   try {
     const [parsedOld, parsedNew] = await Promise.all([
       parseCss(state.oldCss, parseOpts),
@@ -62,10 +66,10 @@ async function runDiff() {
     ])
     const resolvedOld = resolve(parsedOld)
     const resolvedNew = resolve(parsedNew)
-    state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
-    state.orderRisks = await computeOrderRisks(state.oldCss, state.newCss, parseOpts)
-    state.parseError = null
+    diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
+    orderRisks = await computeOrderRisks(state.oldCss, state.newCss, parseOpts)
   } catch (err) {
+    if (gen !== _diffGeneration) return
     // CSS パースエラー: 例外を握りつぶさずユーザーに表示する
     state.parseError = err.message
     state.diffResult = null
@@ -77,6 +81,12 @@ async function runDiff() {
     renderResults()
     return
   }
+
+  if (gen !== _diffGeneration) return
+
+  state.diffResult = diffResult
+  state.orderRisks = orderRisks
+  state.parseError = null
   state.expandedOrderRiskContexts = new Set(
     state.orderRisks.filter(r => r.hasWarning).map(r => r.contextKey)
   )
@@ -285,7 +295,7 @@ initDropzone(oldDropEl, (text, fileName) => {
     fileName,
     lineCount: text.split('\n').length,
   })
-  runDiff() // intentional fire-and-forget
+  runDiff()
 })
 
 initDropzone(newDropEl, (text, fileName) => {
@@ -295,7 +305,7 @@ initDropzone(newDropEl, (text, fileName) => {
     fileName,
     lineCount: text.split('\n').length,
   })
-  runDiff() // intentional fire-and-forget
+  runDiff()
 })
 
 // 検索
@@ -317,12 +327,12 @@ filterBtnsEl.querySelectorAll('[data-filter]').forEach(btn => {
 // オプション チェックボックス
 optIgnoreCosmeticEl?.addEventListener('change', () => {
   state.ignoreCosmetic = optIgnoreCosmeticEl.checked
-  runDiff() // intentional fire-and-forget
+  runDiff()
 })
 
 optSemanticSelectorsEl?.addEventListener('change', () => {
   state.semanticSelectors = optSemanticSelectorsEl.checked
-  runDiff() // intentional fire-and-forget
+  runDiff()
 })
 
 // ─── 初期ロード ───────────────────────────────────────────────────────────

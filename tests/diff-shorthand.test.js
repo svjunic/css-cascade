@@ -235,6 +235,43 @@ describe('applyShorthandRisksToDiff — Finding 1: マルチ値 shorthand のコ
   })
 })
 
+describe('applyShorthandRisksToDiff — Fix 4: oldWinner === null は status: added になる', () => {
+  it('旧CSSにショートハンドもロングハンドもない場合は status: added になる', async () => {
+    // 旧: .foo { color: red } (padding 関連なし)
+    // 新: .foo { padding-top: 5px } .foo { padding: 10px } (shorthand 後勝ち)
+    const oldCss = `.foo { color: red; }`
+    const newCss = `.foo { color: red; } .foo { padding-top: 5px; } .foo { padding: 10px; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'padding-top')
+    expect(prop?.status).toBe('added')
+    expect(prop?.oldValue).toBeUndefined()
+    // diffCss が explicit 宣言 padding-top:5px を 'added' として検出するため、
+    // applyShorthandRisksToDiff はそれをスキップし newValue は 5px のまま
+    expect(prop?.newValue).toBe('5px')
+  })
+})
+
+describe('applyShorthandRisksToDiff — Fix 5: BOX2_MAP 論理プロパティ系展開', () => {
+  it('padding-inline: 10px 20px で padding-inline-start の newValue === 10px', async () => {
+    // old: padding-inline が前のルール、padding-inline-start が後のルール → longhand 後勝ち
+    // new: padding-inline-start が前のルール、padding-inline が後のルール → shorthand 後勝ち → start = 10px
+    const oldCss = `.foo { padding-inline: 10px 20px; } .foo { padding-inline-start: 30px; }`
+    const newCss = `.foo { padding-inline-start: 30px; } .foo { padding-inline: 10px 20px; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'padding-inline-start')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('30px')
+    expect(prop?.newValue).toBe('10px')
+  })
+
+  it('padding-inline: 10px 20px で padding-inline-end の newValue === 20px', async () => {
+    const oldCss = `.foo { padding-inline: 10px 20px; } .foo { padding-inline-end: 30px; }`
+    const newCss = `.foo { padding-inline-end: 30px; } .foo { padding-inline: 10px 20px; }`
+    const prop = await applyAndGetProp(oldCss, newCss, '.foo', 'padding-inline-end')
+    expect(prop?.status).toBe('changed')
+    expect(prop?.oldValue).toBe('30px')
+    expect(prop?.newValue).toBe('20px')
+  })
+})
+
 describe('applyShorthandRisksToDiff — Finding 7: ctx.status は added/removed を上書きしない', () => {
   it('ctx.status が added のとき shorthand risk 適用後も added のまま', async () => {
     const oldCss = `.foo { padding: 16px; } .foo { padding-right: 40px; }`

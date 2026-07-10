@@ -121,10 +121,11 @@ function bestDecl(decls, prop) {
   }, null)
 }
 
-export async function computeShorthandRisks(oldCss, newCss, options = {}) {
+export async function computeShorthandRisks(oldCss, newCss, options = {}, parser = null) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
-  const parsedOld = typeof oldCss === 'string' ? await parseCss(oldCss, parseOpts) : oldCss
-  const parsedNew = typeof newCss === 'string' ? await parseCss(newCss, parseOpts) : newCss
+  const _parseCss = parser?.parseCss ?? parseCss
+  const parsedOld = typeof oldCss === 'string' ? await _parseCss(oldCss, parseOpts) : oldCss
+  const parsedNew = typeof newCss === 'string' ? await _parseCss(newCss, parseOpts) : newCss
 
   const allContexts = new Set([...parsedOld.keys(), ...parsedNew.keys()])
   const sortedContexts = ['base', ...[...allContexts].filter(k => k !== 'base').sort()]
