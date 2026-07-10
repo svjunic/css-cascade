@@ -1,4 +1,4 @@
-import { parseCss } from './parse.js'
+import { parseCss } from './parse-cssom.js'
 import { resolve } from './resolve.js'
 import { diff } from './diff.js'
 
@@ -54,7 +54,7 @@ function resolveShorthandComponent(shorthand, longhand, value) {
 }
 
 export { parseCss }
-export { parseSelectorOrder } from './parse.js'
+export { parseSelectorOrder } from './parse-cssom.js'
 export { resolve }
 export { diff }
 export {
@@ -91,11 +91,14 @@ export function applyShorthandRisksToDiff(diffResult, shorthandRisks) {
         oldShorthandImportant, oldLonghandImportant,
         shorthandImportant, longhandImportant,
       } of conflicts) {
+        const propEntry = sel.props.get(longhand)
+        // changed/removed/added は上書きしない。undefined と unchanged のみ処理する。
+        // CSSOM はショートハンドとロングハンドを合成するため、競合時は longhand が diff に現れない
+        // (undefined になる) ケースが多い。そのため undefined も昇格対象とする。
+        if (propEntry && propEntry.status !== 'unchanged') continue
+
         const oldEffective = oldWinner === 'longhand' ? oldLonghandValue : resolveShorthandComponent(shorthand, longhand, oldShorthandValue ?? '')
         const newEffective = newWinner === 'longhand' ? longhandValue    : resolveShorthandComponent(shorthand, longhand, shorthandValue ?? '')
-
-        const propEntry = sel.props.get(longhand)
-        if (!propEntry || propEntry.status !== 'unchanged') continue
 
         const oldImportant = oldWinner === 'longhand' ? oldLonghandImportant : oldShorthandImportant
         const newImportant = newWinner === 'longhand' ? longhandImportant    : shorthandImportant
@@ -124,12 +127,17 @@ export function applyShorthandRisksToDiff(diffResult, shorthandRisks) {
  * @param {string} oldCss
  * @param {string} newCss
  * @param {{ ignoreCosmetic?: boolean, semanticSelectors?: boolean }} [options]
- * @returns {Map}
+ * @returns {Promise<Map>}
  */
-export function diffCss(oldCss, newCss, options = {}) {
+export async function diffCss(oldCss, newCss, options = {}) {
+  const parseOpts = { semanticSelectors: options.semanticSelectors }
+  const [parsedOld, parsedNew] = await Promise.all([
+    parseCss(oldCss, parseOpts),
+    parseCss(newCss, parseOpts),
+  ])
   return diff(
-    resolve(parseCss(oldCss, { semanticSelectors: options.semanticSelectors })),
-    resolve(parseCss(newCss, { semanticSelectors: options.semanticSelectors })),
+    resolve(parsedOld),
+    resolve(parsedNew),
     { ignoreCosmetic: options.ignoreCosmetic },
   )
 }

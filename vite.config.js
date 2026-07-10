@@ -8,12 +8,8 @@ export default defineConfig({
   build: {
     outDir: '../docs',
   },
-  test: {
-    environment: 'node',
-    include: ['../tests/**/*.{test,spec}.{js,ts}'],
-  },
   optimizeDeps: {
-    include: ['postcss', 'fzf'],
+    include: ['fzf'],
   },
   plugins: [
     {
