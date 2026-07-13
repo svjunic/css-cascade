@@ -1,6 +1,6 @@
 {
   "name": "@svjunic/css-cascade",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "CSS diff tool that compares effective property values by applying cascade rules, not raw text",
   "keywords": [
     "css",
@@ -32,7 +32,8 @@
       "browser": "./src/core/index.js",
       "node": "./src/core/index.node.js",
       "default": "./src/core/index.js"
-    }
+    },
+    "./reporters/html": "./src/reporters/html.js"
   },
   "bin": {
     "css-cascade": "bin/css-cascade.cjs"
@@ -44,7 +45,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@svjunic/css-cascade": "^1.0.1",
     "playwright": "^1.61.1"
   },
   "devDependencies": {
