@@ -2,9 +2,10 @@
 name: css-cascade-npm
 description: テストが書けない大規模CSSにおいて、変更によるカスケードリスク（セレクタの競合・順序変更による意図しない上書き）を検出するスキル。「/css-cascade」「CSSのカスケードリスクを確認して」「CSSの変更影響を確認して」「CSS変更でカスケードが壊れていないか確認して」などのフレーズが出た時に使用。@svjunic/css-cascadeをnpm経由で取得してCSSの意味的差分を確認する（公開・汎用向け）。
 allowed-tools:
-  - Bash
-  - Read
   - AskUserQuestion
+  - Bash
+  - Grep
+  - Read
 ---
 
 # CSS カスケードリスク確認スキル（npm版）
