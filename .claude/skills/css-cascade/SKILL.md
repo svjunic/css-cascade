@@ -2,9 +2,10 @@
 name: css-cascade
 description: テストが書けない大規模CSSにおいて、変更によるカスケードリスク（セレクタの競合・順序変更による意図しない上書き）を検出するスキル。「/css-cascade」「CSSのカスケードリスクを確認して」「CSSの変更影響を確認して」「CSS変更でカスケードが壊れていないか確認して」などのフレーズが出た時に使用。プロジェクト内のスクリプトを使ってCSSの意味的差分を確認する（社内・開発環境向け）。
 allowed-tools:
-  - Bash
-  - Read
   - AskUserQuestion
+  - Bash
+  - Grep
+  - Read
 ---
 
 # CSS カスケードリスク確認スキル（スクリプト版）
