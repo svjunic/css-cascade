@@ -1,6 +1,10 @@
 // ショートハンドリスク検出は CSSOM の inter-rule 宣言順序情報を利用する。
 // 同一ルール内のショートハンド/ロングハンドは CSSOM が合成するため、
 // inter-rule CSS（複数の {} ブロック）でのみ正確に検出できる。
+//
+// 既知の制限: new CSS の支配的 shorthand（Pass 1 で選出）が old CSS に存在しない場合、
+// old CSS で別 shorthand が当該 longhand を支配していても検出できない。
+// このケースは diff の shorthand 削除行で補完できる。
 import { parseCss } from './parse-cssom.js'
 
 const SHORTHAND_MAP = new Map([

@@ -119,7 +119,7 @@ async function main() {
       { ignoreCosmetic: values['ignore-cosmetic'] },
     )
     if (values['order-risk']) {
-      orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] }, { parseCss, parseSelectorOrder })
+      orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] }, { parseCss, parseSelectorOrder }, { parsedOld, parsedNew })
     }
     if (values['shorthand-risk']) {
       shorthandRisks = await computeShorthandRisks(parsedOld, parsedNew, { semanticSelectors: values['semantic-selectors'] })

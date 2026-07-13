@@ -37,7 +37,15 @@ async function _getPage() {
       _page = await context.newPage()
       await _page.addScriptTag({ content: _cssomSource })
       return _page
-    })()
+    })().catch(err => {
+      // 起動失敗時はキャッシュをリセットして次回の再試行を可能にする
+      const b = _browser
+      _pagePromise = null
+      _browser = null
+      _page = null
+      b?.close().catch(() => {})
+      throw err
+    })
   }
   return _pagePromise
 }
@@ -55,9 +63,11 @@ export async function closeBrowser() {
   }
 }
 
-// プロセス終了時にブラウザを自動クリーンアップ
+// プロセス終了時のベストエフォート同期クリーンアップ。
+// close() は非同期のため完了保証はないが、chromium 子プロセスを終了シグナルで促す。
+// 通常のコードパスは closeBrowser() で明示的にクリーンアップ済み。
 process.on('exit', () => {
-  if (_browser) _browser.close()
+  if (_browser) _browser.close().catch(() => {})
 })
 
 async function _cleanup() {
