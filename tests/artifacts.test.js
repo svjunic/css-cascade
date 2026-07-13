@@ -25,7 +25,8 @@ describe('artifacts: css-cascade script skill', () => {
       'index.js',
       'normalize.js',
       'order-risk.js',
-      'parse.js',
+      'parse-cssom.js',
+      'parse-node.js',
       'resolve.js',
       'specificity.js',
     ]
@@ -35,11 +36,11 @@ describe('artifacts: css-cascade script skill', () => {
     }
   })
 
-  it('script skill は postcss のみを runtime dependency として持つ', () => {
+  it('script skill は playwright のみを runtime dependency として持つ', () => {
     const pkg = json('.claude/skills/css-cascade/package.json')
 
     expect(pkg.type).toBe('module')
-    expect(pkg.dependencies).toEqual({ postcss: '^8.5.0' })
+    expect(pkg.dependencies).toEqual({ playwright: '^1.61.1' })
   })
 })
 

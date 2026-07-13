@@ -32,6 +32,7 @@ css-cascade old.css new.css --ignore-cosmetic
 | `--format <text\|json\|html>`                        | 出力フォーマット (default: text)   |
 | `--filter <changed\|added\|removed\|unchanged\|all>` | 絞り込み (default: changed)        |
 | `--order-risk`                                       | セレクタ出現順の変更リスクを検出   |
+| `--shorthand-risk`                                   | shorthand / longhand の競合リスクを検出 |
 | `--ignore-cosmetic`                                  | 表記揺れを無視                     |
 | `--semantic-selectors`                               | 属性セレクタのクォート有無を同一視 |
 | `--no-color`                                         | ANSI カラーを無効化                |

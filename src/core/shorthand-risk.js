@@ -1,4 +1,11 @@
-import { parseCss } from './parse.js'
+// ショートハンドリスク検出は CSSOM の inter-rule 宣言順序情報を利用する。
+// 同一ルール内のショートハンド/ロングハンドは CSSOM が合成するため、
+// inter-rule CSS（複数の {} ブロック）でのみ正確に検出できる。
+//
+// 既知の制限: new CSS の支配的 shorthand（Pass 1 で選出）が old CSS に存在しない場合、
+// old CSS で別 shorthand が当該 longhand を支配していても検出できない。
+// このケースは diff の shorthand 削除行で補完できる。
+import { parseCss } from './parse-cssom.js'
 
 const SHORTHAND_MAP = new Map([
   ['padding',         ['padding-top', 'padding-right', 'padding-bottom', 'padding-left',
@@ -43,10 +50,7 @@ const SHORTHAND_MAP = new Map([
   ['animation',       ['animation-name', 'animation-duration', 'animation-timing-function',
                        'animation-delay', 'animation-iteration-count', 'animation-direction',
                        'animation-fill-mode', 'animation-play-state']],
-  ['inset',           ['top', 'right', 'bottom', 'left',
-                       'inset-inline-start', 'inset-inline-end',
-                       'inset-block-start', 'inset-block-end',
-                       'inset-inline', 'inset-block']],
+  ['inset',           ['top', 'right', 'bottom', 'left']],
   ['inset-inline',    ['inset-inline-start', 'inset-inline-end']],
   ['inset-block',     ['inset-block-start', 'inset-block-end']],
   ['padding-inline',  ['padding-inline-start', 'padding-inline-end']],
@@ -118,10 +122,11 @@ function bestDecl(decls, prop) {
   }, null)
 }
 
-export function computeShorthandRisks(oldCss, newCss, options = {}) {
+export async function computeShorthandRisks(oldCss, newCss, options = {}, parser = null) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
-  const parsedOld = oldCss instanceof Map ? oldCss : parseCss(oldCss, parseOpts)
-  const parsedNew = newCss instanceof Map ? newCss : parseCss(newCss, parseOpts)
+  const _parseCss = parser?.parseCss ?? parseCss
+  const parsedOld = typeof oldCss === 'string' ? await _parseCss(oldCss, parseOpts) : oldCss
+  const parsedNew = typeof newCss === 'string' ? await _parseCss(newCss, parseOpts) : newCss
 
   const allContexts = new Set([...parsedOld.keys(), ...parsedNew.keys()])
   const sortedContexts = ['base', ...[...allContexts].filter(k => k !== 'base').sort()]
@@ -142,53 +147,48 @@ export function computeShorthandRisks(oldCss, newCss, options = {}) {
       const oldDecls = oldBySel.get(selector) ?? []
       const conflicts = []
 
-      const reportedLonghands = new Set()
+      // Pass 1: longhand ごとに new CSS での支配的 shorthand（最も source-index が高いもの）を特定
+      const longhandDominant = new Map()
       for (const [shorthand, longhands] of SHORTHAND_MAP) {
-        const newHasShorthand = newDecls.some(d => d.prop === shorthand)
-        if (!newHasShorthand) continue
-
-        const bestShorthandDecl    = bestDecl(newDecls, shorthand)
-        const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
-
+        const bsd = bestDecl(newDecls, shorthand)
+        if (!bsd) continue
         for (const longhand of longhands) {
-          const newHasLonghand = newDecls.some(d => d.prop === longhand)
-          if (!newHasLonghand) continue
-
-          if (reportedLonghands.has(longhand)) continue
-
-          const oldWinner = getIntraWinner(oldDecls, shorthand, longhand)
-          const newWinner = getIntraWinner(newDecls, shorthand, longhand)
-
-          if (oldWinner === newWinner) continue
-
-          let direction
-          if (newWinner === 'shorthand') {
-            direction = 'A'
-            hasWarning = true
-          } else {
-            direction = 'B'
+          if (!newDecls.some(d => d.prop === longhand)) continue
+          const existing = longhandDominant.get(longhand)
+          if (!existing ||
+              bsd.layerRank > existing.bestShorthandDecl.layerRank ||
+              (bsd.layerRank === existing.bestShorthandDecl.layerRank &&
+               bsd.idx > existing.bestShorthandDecl.idx)) {
+            longhandDominant.set(longhand, { shorthand, bestShorthandDecl: bsd })
           }
-
-          const bestLonghandDecl     = bestDecl(newDecls, longhand)
-          const oldBestLonghandDecl  = bestDecl(oldDecls, longhand)
-
-          reportedLonghands.add(longhand)
-          conflicts.push({
-            shorthand,
-            longhand,
-            oldWinner,
-            newWinner,
-            direction,
-            oldShorthandValue:    oldBestShorthandDecl?.value    ?? null,
-            oldLonghandValue:     oldBestLonghandDecl?.value     ?? null,
-            longhandValue:        bestLonghandDecl?.value        ?? null,
-            shorthandValue:       bestShorthandDecl?.value       ?? null,
-            oldShorthandImportant: oldBestShorthandDecl?.important ?? false,
-            oldLonghandImportant:  oldBestLonghandDecl?.important  ?? false,
-            shorthandImportant:    bestShorthandDecl?.important    ?? false,
-            longhandImportant:     bestLonghandDecl?.important     ?? false,
-          })
         }
+      }
+
+      // Pass 2: 支配的 shorthand との勝敗を old/new で比較し競合を報告
+      for (const [longhand, { shorthand, bestShorthandDecl }] of longhandDominant) {
+        const oldWinner = getIntraWinner(oldDecls, shorthand, longhand)
+        const newWinner = getIntraWinner(newDecls, shorthand, longhand)
+
+        if (oldWinner === newWinner) continue
+
+        const direction = newWinner === 'shorthand' ? 'A' : 'B'
+        if (direction === 'A') hasWarning = true
+
+        const oldBestShorthandDecl = bestDecl(oldDecls, shorthand)
+        const bestLonghandDecl     = bestDecl(newDecls, longhand)
+        const oldBestLonghandDecl  = bestDecl(oldDecls, longhand)
+
+        conflicts.push({
+          shorthand, longhand, oldWinner, newWinner, direction,
+          oldShorthandValue:     oldBestShorthandDecl?.value    ?? null,
+          oldLonghandValue:      oldBestLonghandDecl?.value     ?? null,
+          longhandValue:         bestLonghandDecl?.value        ?? null,
+          shorthandValue:        bestShorthandDecl?.value       ?? null,
+          oldShorthandImportant: oldBestShorthandDecl?.important ?? false,
+          oldLonghandImportant:  oldBestLonghandDecl?.important  ?? false,
+          shorthandImportant:    bestShorthandDecl?.important    ?? false,
+          longhandImportant:     bestLonghandDecl?.important     ?? false,
+        })
       }
 
       if (conflicts.length > 0) {
