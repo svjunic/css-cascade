@@ -4,13 +4,15 @@
  * 状態管理・イベント結線・描画の調整を担う。
  */
 
-import { parseCss } from '../core/parse.js'
+import { parseCss } from '../core/parse-cssom.js'
 import { resolve } from '../core/resolve.js'
 import { diff } from '../core/diff.js'
 import { computeOrderRisks } from '../core/order-risk.js'
+import { computeShorthandRisks } from '../core/shorthand-risk.js'
+import { applyShorthandRisksToDiff } from '../core/index.js'
 import { initDropzone, updateDropzoneState } from './dropzone.js'
 import { createSearchIndex, search } from './fuzzy.js'
-import { renderDiff, summarizeDiff, renderOrderRisks, esc } from './render.js'
+import { renderDiff, summarizeDiff, renderOrderRisks, renderShorthandRisks, esc } from './render.js'
 
 // ─── 状態 ─────────────────────────────────────────────────────────────────
 const state = {
@@ -32,6 +34,7 @@ const state = {
   semanticSelectors: false,
   // 出現順リスク
   orderRisks: [],
+  shorthandRisks: null,
   // 出現順リスクセクションで展開中のコンテキスト: Set<contextKey>
   expandedOrderRiskContexts: new Set(),
   // クリックで展開中のセレクタ: Set<"contextKey||selector">
@@ -51,23 +54,32 @@ const optSemanticSelectorsEl = document.getElementById('opt-semantic-selectors')
 
 // ─── コア処理 ─────────────────────────────────────────────────────────────
 
-function runDiff() {
+let _diffGeneration = 0
+
+async function runDiff() {
   if (!state.oldCss || !state.newCss) return
+  const gen = ++_diffGeneration
 
   const parseOpts = { semanticSelectors: state.semanticSelectors }
+  let diffResult, orderRisks, shorthandRisks
   try {
-    const parsedOld = parseCss(state.oldCss, parseOpts)
-    const parsedNew = parseCss(state.newCss, parseOpts)
+    const [parsedOld, parsedNew] = await Promise.all([
+      parseCss(state.oldCss, parseOpts),
+      parseCss(state.newCss, parseOpts),
+    ])
     const resolvedOld = resolve(parsedOld)
     const resolvedNew = resolve(parsedNew)
-    state.diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
-    state.orderRisks = computeOrderRisks(state.oldCss, state.newCss, parseOpts)
-    state.parseError = null
+    diffResult = diff(resolvedOld, resolvedNew, { ignoreCosmetic: state.ignoreCosmetic })
+    shorthandRisks = await computeShorthandRisks(parsedOld, parsedNew, parseOpts)
+    applyShorthandRisksToDiff(diffResult, shorthandRisks)
+    orderRisks = await computeOrderRisks(state.oldCss, state.newCss, parseOpts, null, { parsedOld, parsedNew })
   } catch (err) {
+    if (gen !== _diffGeneration) return
     // CSS パースエラー: 例外を握りつぶさずユーザーに表示する
     state.parseError = err.message
     state.diffResult = null
     state.orderRisks = []
+    state.shorthandRisks = null
     state.allItems = []
     state.fzfInstance = null
     updateContextTabs()
@@ -75,6 +87,13 @@ function runDiff() {
     renderResults()
     return
   }
+
+  if (gen !== _diffGeneration) return
+
+  state.diffResult = diffResult
+  state.orderRisks = orderRisks
+  state.shorthandRisks = shorthandRisks
+  state.parseError = null
   state.expandedOrderRiskContexts = new Set(
     state.orderRisks.filter(r => r.hasWarning).map(r => r.contextKey)
   )
@@ -163,13 +182,15 @@ function renderResults() {
     expandedContexts: state.expandedOrderRiskContexts,
   })
 
-  const diffHtml = renderDiff(state.diffResult, isOrderRiskFilter ? filteredItems : filteredItems, {
+  const shorthandRisksHtml = renderShorthandRisks(state.shorthandRisks)
+
+  const diffHtml = renderDiff(state.diffResult, filteredItems, {
     activeContext: state.activeContext,
     showUnchanged: state.showUnchanged,
     expandedSelectors: state.expandedSelectors,
   })
 
-  resultsEl.innerHTML = orderRisksHtml + diffHtml
+  resultsEl.innerHTML = orderRisksHtml + shorthandRisksHtml + diffHtml
 
   // 出現順リスクのコンテキストヘッダーをクリックで開閉
   resultsEl.querySelectorAll('.or-context-header[data-or-ctx-key]').forEach(header => {
@@ -349,7 +370,7 @@ async function loadInitialFiles() {
         lineCount: newText.split('\n').length,
       })
 
-      runDiff()
+      await runDiff()
     }
   } catch {
     // 初期ファイルが取得できない場合は無視

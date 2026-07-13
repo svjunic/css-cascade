@@ -4,10 +4,12 @@
 
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { parseCss } from '../src/core/parse.js'
+import { parseCss, parseSelectorOrder, closeBrowser } from '../src/core/parse-node.js'
 import { resolve } from '../src/core/resolve.js'
 import { diff } from '../src/core/diff.js'
 import { computeOrderRisks } from '../src/core/order-risk.js'
+import { computeShorthandRisks } from '../src/core/shorthand-risk.js'
+import { applyShorthandRisksToDiff } from '../src/core/index.js'
 import { generateHtmlReport } from '../src/reporters/html.js'
 
 const HELP = `Usage: css-cascade <old.css> <new.css> [options]
@@ -21,6 +23,7 @@ Options:
   --filter <changed|added|removed|unchanged|all>
                                           ステータスで絞り込み (default: changed)
   --order-risk                            セレクタ出現順リスクを表示
+  --shorthand-risk                        shorthand/longhand の順序リスクを表示
   --ignore-cosmetic                       表記揺れを無視
   --semantic-selectors                    属性セレクタのクォート有無を同一視
   --no-color                              ANSI カラーを無効化
@@ -39,6 +42,7 @@ try {
       format:               { type: 'string',  default: 'text' },
       filter:               { type: 'string',  default: 'changed' },
       'order-risk':         { type: 'boolean', default: false },
+      'shorthand-risk':     { type: 'boolean', default: false },
       'ignore-cosmetic':    { type: 'boolean', default: false },
       'semantic-selectors': { type: 'boolean', default: false },
       'no-color':           { type: 'boolean', default: false },
@@ -99,22 +103,33 @@ const [oldPath, newPath] = positionals
 const oldCss = readFile(oldPath)
 const newCss = readFile(newPath)
 
-let result
-let orderRisks = []
-try {
-  const parseOptions = { semanticSelectors: values['semantic-selectors'] }
-  result = diff(
-    resolve(parseCss(oldCss, parseOptions)),
-    resolve(parseCss(newCss, parseOptions)),
-    { ignoreCosmetic: values['ignore-cosmetic'] },
-  )
-  if (values['order-risk']) {
-    orderRisks = computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] })
+async function main() {
+  let result
+  let orderRisks = []
+  let shorthandRisks = { hasWarning: false, risks: [] }
+  try {
+    const parseOptions = { semanticSelectors: values['semantic-selectors'] }
+    const [parsedOld, parsedNew] = await Promise.all([
+      parseCss(oldCss, parseOptions),
+      parseCss(newCss, parseOptions),
+    ])
+    result = diff(
+      resolve(parsedOld),
+      resolve(parsedNew),
+      { ignoreCosmetic: values['ignore-cosmetic'] },
+    )
+    if (values['order-risk']) {
+      orderRisks = await computeOrderRisks(oldCss, newCss, { semanticSelectors: values['semantic-selectors'] }, { parseCss, parseSelectorOrder }, { parsedOld, parsedNew })
+    }
+    if (values['shorthand-risk']) {
+      shorthandRisks = await computeShorthandRisks(parsedOld, parsedNew, { semanticSelectors: values['semantic-selectors'] })
+      applyShorthandRisksToDiff(result, shorthandRisks)
+    }
+  } catch (err) {
+    await closeBrowser().catch(() => {})
+    console.error(`Parse error: ${err.message}`)
+    process.exit(2)
   }
-} catch (err) {
-  console.error(`Parse error: ${err.message}`)
-  process.exit(2)
-}
 
 // filter: 'changed' は added+removed+changed をすべて含む（「差分あり」の意）
 function shouldInclude(status, filter) {
@@ -141,12 +156,14 @@ function summarize(result) {
 const summary = summarize(result)
 const hasDiff = summary.changed > 0 || summary.added > 0 || summary.removed > 0
 const hasOrderWarning = values['order-risk'] && orderRisks.some(r => r.hasWarning)
+const hasShorthandWarning = values['shorthand-risk'] && shorthandRisks.hasWarning
 const filter = values.filter
 
 if (values.format === 'html') {
-  const html = generateHtmlReport(result, values['order-risk'] ? orderRisks : null)
+  const html = generateHtmlReport(result, values['order-risk'] ? orderRisks : null, values['shorthand-risk'] ? shorthandRisks : null)
   process.stdout.write(html)
-  process.exit((hasDiff || hasOrderWarning) ? 1 : 0)
+  await closeBrowser()
+  process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
 }
 
 if (values.format === 'json') {
@@ -169,6 +186,7 @@ if (values.format === 'json') {
   }
   const output = { version: 1, summary, contexts }
   if (values['order-risk']) output.orderRisks = orderRisks
+  if (values['shorthand-risk']) output.shorthandRisks = shorthandRisks
   console.log(JSON.stringify(output, null, 2))
 } else {
   const useColor = !values['no-color'] && !!process.stdout.isTTY
@@ -250,6 +268,34 @@ if (values.format === 'json') {
       }
     }
   }
+
+  if (values['shorthand-risk'] && shorthandRisks.risks.length > 0) {
+    console.log(`\nShorthand Risks:`)
+    for (const { contextKey, selectors } of shorthandRisks.risks) {
+      console.log(`\n${c.cyan}[${contextKey}]${c.reset}`)
+      for (const { selector, conflicts } of selectors) {
+        console.log(`  ${c.dim}${selector}${c.reset}`)
+        for (const conflict of conflicts) {
+          const { shorthand, longhand, direction, oldWinner, longhandValue, shorthandValue, oldLonghandValue, oldShorthandValue } = conflict
+          if (direction === 'A') {
+            console.log(`    ${c.yellow}⚠ ${longhand}: shorthand に上書きされた（旧: ${longhand}:${oldLonghandValue ?? ''} が有効 → 新: ${shorthand}:${shorthandValue ?? ''} に上書き）${c.reset}`)
+          } else if (oldWinner === null) {
+            console.log(`    ${c.green}↗ ${longhand}: 新規（longhand が有効: ${longhand}:${longhandValue ?? ''}）${c.reset}`)
+          } else {
+            console.log(`    ${c.green}↗ ${longhand}: shorthand 上書き解消（旧: ${shorthand}:${oldShorthandValue ?? ''} に上書き → 新: ${longhand}:${longhandValue ?? ''} が有効）${c.reset}`)
+          }
+        }
+      }
+    }
+  }
 }
 
-process.exit((hasDiff || hasOrderWarning) ? 1 : 0)
+  await closeBrowser()
+  process.exit((hasDiff || hasOrderWarning || hasShorthandWarning) ? 1 : 0)
+}
+
+main().catch(async err => {
+  console.error(err.message || String(err))
+  try { await closeBrowser() } catch { /* ignore */ }
+  process.exit(1)
+})

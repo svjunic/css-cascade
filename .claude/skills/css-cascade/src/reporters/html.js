@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { renderDiff, renderOrderRisks } from '../ui/render.js'
+import { renderDiff, renderOrderRisks, renderShorthandRisks } from '../ui/render.js'
 
 // esbuild bundles with define: { __BUNDLED_CSS__: JSON.stringify(css) }
 // In ESM context (npm package), falls back to readFileSync
@@ -58,9 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * @param {Map} diffResult - diff() の出力
  * @param {Array|null} orderRisks - computeOrderRisks() の出力、または null
+ * @param {object|null} shorthandRisks - computeShorthandRisks() の出力、または null
  * @returns {string} セルフコンテインドHTML文字列
  */
-export function generateHtmlReport(diffResult, orderRisks) {
+export function generateHtmlReport(diffResult, orderRisks, shorthandRisks) {
   const css = getCss()
 
   // 変更があったセレクタのみ filteredItems に含める
@@ -78,6 +79,7 @@ export function generateHtmlReport(diffResult, orderRisks) {
 
   const hasPropertyChanges = filteredItems.length > 0
   const hasOrderRisks = orderRisks && orderRisks.length > 0
+  const hasShorthandRisks = shorthandRisks && shorthandRisks.risks && shorthandRisks.risks.length > 0
 
   // 静的レポートではすべての順序リストコンテキストを展開済みにする
   const expandedContexts = orderRisks ? new Set(orderRisks.map(r => r.contextKey)) : new Set()
@@ -89,7 +91,10 @@ export function generateHtmlReport(diffResult, orderRisks) {
   if (hasOrderRisks) {
     bodyContent += renderOrderRisks(orderRisks, { expandedContexts })
   }
-  if (!hasPropertyChanges && !hasOrderRisks) {
+  if (hasShorthandRisks) {
+    bodyContent += renderShorthandRisks(shorthandRisks)
+  }
+  if (!hasPropertyChanges && !hasOrderRisks && !hasShorthandRisks) {
     bodyContent = '<div class="empty-state">差分はありません。</div>'
   }
 

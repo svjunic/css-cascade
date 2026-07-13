@@ -421,6 +421,78 @@ export function renderOrderRisks(orderRisks, { activeContext = 'all', filterOrde
   </section>`
 }
 
+// ─── shorthand/longhand リスクのレンダリング ─────────────────────────────
+
+export function renderShorthandRisks(shorthandRisks) {
+  if (!shorthandRisks || !shorthandRisks.risks || shorthandRisks.risks.length === 0) return ''
+
+  const { risks, hasWarning } = shorthandRisks
+  const totalConflicts = risks.reduce((n, r) => n + r.selectors.reduce((m, s) => m + s.conflicts.length, 0), 0)
+  if (totalConflicts === 0) return ''
+
+  const contextsHtml = risks.map(({ contextKey, selectors }) => {
+    const label = contextKey === 'base' ? 'トップレベル (base)' : esc(contextKey)
+    const hasCtxWarning = selectors.some(s => s.conflicts.some(c => c.direction === 'A'))
+
+    const selectorsHtml = selectors.map(({ selector, conflicts }) => {
+      const conflictsHtml = conflicts.map(({ shorthand, longhand, direction, oldWinner, longhandValue, shorthandValue, oldShorthandValue }) => {
+        const shn = esc(shorthand)
+        const lhn = esc(longhand)
+        const shv = esc(shorthandValue ?? '')
+        const oldShv = esc(oldShorthandValue ?? '')
+        const lhv = esc(longhandValue ?? '')
+        if (direction === 'A') {
+          return `<div class="sr-conflict sr-conflict--risk">
+            <span class="sr-badge sr-badge--risk">⚠ リスク</span>
+            <code class="sr-longhand">${lhn}</code>
+            <span class="sr-desc">が <code>${shn}: ${shv}</code> に上書きされた（旧: longhand が有効 → 新: shorthand が上書き）</span>
+          </div>`
+        } else if (oldWinner === null) {
+          return `<div class="sr-conflict sr-conflict--resolved">
+            <span class="sr-badge sr-badge--resolved">↗ 新規</span>
+            <code class="sr-longhand">${lhn}</code>
+            <span class="sr-desc">（新規追加: <code>${lhn}: ${lhv}</code> が有効）</span>
+          </div>`
+        } else {
+          return `<div class="sr-conflict sr-conflict--resolved">
+            <span class="sr-badge sr-badge--resolved">↗ 解消</span>
+            <code class="sr-longhand">${lhn}</code>
+            <span class="sr-desc">の shorthand 上書きが解消（旧: <code>${shn}: ${oldShv}</code> に上書き → 新: <code>${lhn}: ${lhv}</code> が有効）</span>
+          </div>`
+        }
+      }).join('')
+
+      return `<div class="sr-selector">
+        <code class="sr-selector-name">${esc(selector)}</code>
+        <div class="sr-conflicts">${conflictsHtml}</div>
+      </div>`
+    }).join('')
+
+    const badge = hasCtxWarning
+      ? `<span class="sr-ctx-badge sr-ctx-badge--warning">⚠ リスクあり</span>`
+      : `<span class="sr-ctx-badge sr-ctx-badge--ok">変更のみ</span>`
+
+    return `<div class="sr-context">
+      <div class="sr-context-header">
+        <span class="sr-context-label">${label}</span>
+        ${badge}
+      </div>
+      <div class="sr-selectors">${selectorsHtml}</div>
+    </div>`
+  }).join('')
+
+  return `<section class="shorthand-risks-section">
+    <div class="shorthand-risks-header">
+      <span class="shorthand-risks-title">Shorthand/Longhand 競合</span>
+      ${hasWarning
+        ? `<span class="shorthand-risks-count shorthand-risks-count--warning">⚠ ${totalConflicts} 件の競合（リスクあり）</span>`
+        : `<span class="shorthand-risks-count shorthand-risks-count--ok">${totalConflicts} 件の競合（変更のみ）</span>`
+      }
+    </div>
+    ${contextsHtml}
+  </section>`
+}
+
 // ─── 差分のレンダリング ───────────────────────────────────────────────────
 
 /**

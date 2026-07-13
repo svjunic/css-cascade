@@ -1,4 +1,4 @@
-import { parseCss, parseSelectorOrder } from './parse.js'
+import { parseCss, parseSelectorOrder } from './parse-cssom.js'
 import { resolve } from './resolve.js'
 import { sameSpecificity, computeSpecificity, compareSpecificity } from './specificity.js'
 
@@ -98,6 +98,59 @@ function pickWinner(selA, selX, entryA, entryX, specCmp, posA, posX) {
   return posA > posX ? selA : selX
 }
 
+function stripParens(s) {
+  let result = ''
+  let depth = 0
+  for (const ch of s) {
+    if (ch === '(') { depth++; continue }
+    if (ch === ')') { depth--; continue }
+    if (depth === 0) result += ch
+  }
+  return result
+}
+
+/**
+ * 2 セレクタが構造的に同一要素へ同時適用される可能性があるかを判定する。
+ * false を返した場合、annotateMovedRow がそのペアをスキップして過剰検知を防ぐ。
+ * コンビネータを含む場合は保守的に true を返す。
+ */
+function hasStructuralOverlap(selA, selX) {
+  // コンビネータ（スペース・>・+・~）を擬似クラス引数の外側で検出 → 保守的に true
+  const flatA = stripParens(selA)
+  const flatX = stripParens(selX)
+  if (/[\s>+~]/.test(flatA) || /[\s>+~]/.test(flatX)) return true
+
+  function parseBase(sel) {
+    const s = stripParens(sel).replace(/:{1,2}[\w-]+/g, '')
+    const ids = new Set()
+    const classes = new Set()
+    let type = null
+    for (const m of s.matchAll(/#([\w-]+)/g)) ids.add(m[1])
+    for (const m of s.matchAll(/\.([\w-]+)/g)) classes.add(m[1])
+    const typeMatch = s.match(/^([a-zA-Z][\w-]*)/)
+    if (typeMatch) type = typeMatch[1]
+    return { type, ids, classes }
+  }
+
+  const baseA = parseBase(selA)
+  const baseX = parseBase(selX)
+
+  // 両者が要素タイプを持ち、かつ異なる場合は同一要素への同時適用が不可
+  if (baseA.type && baseX.type && baseA.type !== baseX.type) return false
+
+  // ID ∪ クラスの集合でサブセットチェック
+  const setA = new Set([...baseA.ids, ...baseA.classes])
+  const setX = new Set([...baseX.ids, ...baseX.classes])
+
+  // どちらかが空（タイプのみ等、ユニバーサル相当）はサブセットとみなす
+  if (setA.size === 0 || setX.size === 0) return true
+
+  // 一方が他方のサブセットなら同一要素に同時適用される可能性がある
+  const aSubX = [...setA].every(v => setX.has(v))
+  const xSubA = [...setX].every(v => setA.has(v))
+  return aSubX || xSubA
+}
+
 function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   const selA = row.oldSelector
   const selX = row.newSelector
@@ -117,6 +170,9 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   const oldAbeforeX = oldPosA < oldPosX
   const newAbeforeX = newPosA < newPosX
   if (oldAbeforeX === newAbeforeX) return
+
+  // 構造的に独立したセレクタ（共通クラス成分なし）は同一要素への同時適用が保証されないため除外
+  if (!hasStructuralOverlap(selA, selX)) return
 
   // セレクタ文字列は old/new で同一なので詳細度比較は 1 度で足りる
   const specCmp = compareSpecificity(computeSpecificity(selA), computeSpecificity(selX))
@@ -173,13 +229,21 @@ function annotateMovedRow(row, oldList, newList, oldCtxProps, newCtxProps) {
   }
 }
 
-export function computeOrderRisks(oldCss, newCss, options = {}) {
+export async function computeOrderRisks(oldCss, newCss, options = {}, parser = null, precomputed = {}) {
   const parseOpts = { semanticSelectors: options.semanticSelectors }
+  const _parseCss = parser?.parseCss ?? parseCss
+  const _parseSelectorOrder = parser?.parseSelectorOrder ?? parseSelectorOrder
 
-  const oldOrder = parseSelectorOrder(oldCss, parseOpts)
-  const newOrder = parseSelectorOrder(newCss, parseOpts)
-  const resolvedOld = resolve(parseCss(oldCss, parseOpts))
-  const resolvedNew = resolve(parseCss(newCss, parseOpts))
+  const [oldOrder, newOrder] = await Promise.all([
+    _parseSelectorOrder(oldCss, parseOpts),
+    _parseSelectorOrder(newCss, parseOpts),
+  ])
+  const [parsedOld, parsedNew] = await Promise.all([
+    precomputed.parsedOld ?? _parseCss(oldCss, parseOpts),
+    precomputed.parsedNew ?? _parseCss(newCss, parseOpts),
+  ])
+  const resolvedOld = resolve(parsedOld)
+  const resolvedNew = resolve(parsedNew)
 
   const allContexts = new Set([...oldOrder.keys(), ...newOrder.keys()])
   const sortedContexts = ['base', ...[...allContexts].filter(k => k !== 'base').sort()]
@@ -202,8 +266,8 @@ export function computeOrderRisks(oldCss, newCss, options = {}) {
       }
     }
 
-    // 共通プロパティを持つ moved 行がある場合のみ warning（無関係プロパティのスワップは除外）
-    const hasWarning = rows.some(r => r.type === 'moved' && r.hasOverlappingProps)
+    // 有効値が実際に変化する競合プロパティがある moved 行がある場合のみ warning
+    const hasWarning = rows.some(r => r.type === 'moved' && r.conflictingProps?.length > 0)
 
     if (rows.some(r => r.type !== 'equal')) {
       results.push({ contextKey, rows, hasWarning })
