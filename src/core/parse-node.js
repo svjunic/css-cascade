@@ -34,6 +34,7 @@ async function _getPage() {
     _pagePromise = (async () => {
       _browser = await chromium.launch({ headless: true })
       const context = await _browser.newContext()
+      await context.route('**/*', route => route.abort())
       _page = await context.newPage()
       await _page.addScriptTag({ content: _cssomSource })
       return _page
