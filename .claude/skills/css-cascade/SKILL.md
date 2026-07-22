@@ -125,20 +125,8 @@ while IFS= read -r -d '' filepath; do
   [ "$FILE_EXIT" -gt "$OVERALL_EXIT" ] && OVERALL_EXIT=$FILE_EXIT
 done < <(git diff --name-only -z HEAD -- '*.css' | sort -z)
 
-echo "CLEANUP_DIR=$WORK_DIR"
+rm -rf "$WORK_DIR"
 exit $OVERALL_EXIT
-```
-
-上記コマンドの出力から `CLEANUP_DIR` の値（一時ディレクトリのパス）を取得する。
-
-一時ディレクトリを削除する前に、**AskUserQuestion ツール**で確認する：
-- 質問: 「以下の一時ディレクトリを削除します。続行してよいですか？（対象: <CLEANUP_DIR の値>）」
-- 選択肢: 「削除する」 / 「キャンセルする」
-
-「キャンセルする」が選択された場合は削除をスキップする。「削除する」が選択された場合は以下を実行する（`<CLEANUP_DIR の値>` には取得した実際のパスを代入する）：
-
-```bash
-rm -rf "<CLEANUP_DIR の値>"
 ```
 
 終了コードの意味（`OVERALL_EXIT` = 全ファイル中の最大値）：
